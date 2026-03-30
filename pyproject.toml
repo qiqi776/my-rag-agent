@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "minimal-modular-rag"
+version = "0.1.0"
+description = "Minimal modular RAG project scaffold"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0",
+    "pytest-asyncio>=1.0",
+    "ruff>=0.15",
+]
+
+[project.scripts]
+mrag-ingest = "src.interfaces.cli.ingest:main"
+mrag-query = "src.interfaces.cli.query:main"
+mrag-docs = "src.interfaces.cli.documents:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "unit: fast unit tests",
+    "integration: integration tests",
+    "e2e: end-to-end tests",
+]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
