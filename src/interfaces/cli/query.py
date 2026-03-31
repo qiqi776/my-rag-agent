@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from src.adapters.embedding.fake_embedding import FakeEmbedding
-from src.adapters.vector_store.in_memory_store import InMemoryVectorStore
+from src.adapters.embedding.factory import create_embedding
+from src.adapters.vector_store.factory import create_vector_store
 from src.application.search_service import SearchService
 from src.core.errors import ConfigError, EmptyQueryError
 from src.core.settings import load_settings
@@ -32,8 +32,8 @@ def main() -> int:
         settings = load_settings(args.config)
         service = SearchService(
             settings=settings,
-            embedding=FakeEmbedding(settings.adapters.embedding.dimensions),
-            vector_store=InMemoryVectorStore(settings.adapters.vector_store.storage_path),
+            embedding=create_embedding(settings),
+            vector_store=create_vector_store(settings),
             trace_store=TraceStore(settings.observability.trace_file)
             if settings.observability.trace_enabled
             else None,

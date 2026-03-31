@@ -1,11 +1,10 @@
-"""In-memory vector store with optional local snapshot persistence."""
+"""Pure in-memory vector store."""
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
+from typing import Any
 
-from src.core.settings import resolve_path
+from src.adapters.vector_store.base_vector_store import BaseVectorStore
 from src.core.types import ChunkRecord, RetrievalResult
 
 
@@ -20,20 +19,16 @@ def _cosine_similarity(left: list[float], right: list[float]) -> float:
     return dot / (left_norm * right_norm)
 
 
-class InMemoryVectorStore:
-    """Simple in-memory store with JSON snapshot support."""
+class InMemoryVectorStore(BaseVectorStore):
+    """Simple in-memory store without any persistence side effects."""
 
-    def __init__(self, storage_path: str | Path | None = None) -> None:
-        self.storage_path = resolve_path(storage_path or "./data/db/vector_store.json")
-        self.storage_path.parent.mkdir(parents=True, exist_ok=True)
-        self._collections: dict[str, dict[str, ChunkRecord]] = {}
-        self._load()
+    def __init__(self, initial_collections: dict[str, dict[str, ChunkRecord]] | None = None) -> None:
+        self._collections = initial_collections or {}
 
     def upsert(self, collection: str, records: list[ChunkRecord]) -> int:
         bucket = self._collections.setdefault(collection, {})
         for record in records:
             bucket[record.id] = record
-        self._flush()
         return len(records)
 
     def query(self, collection: str, query_vector: list[float], top_k: int) -> list[RetrievalResult]:
@@ -64,27 +59,27 @@ class InMemoryVectorStore:
             del bucket[chunk_id]
         if not bucket and collection in self._collections:
             del self._collections[collection]
-        self._flush()
         return len(to_delete)
 
-    def _load(self) -> None:
-        if not self.storage_path.exists():
-            return
-        raw = json.loads(self.storage_path.read_text(encoding="utf-8"))
-        self._collections = {
-            collection: {
-                record_data["id"]: ChunkRecord.from_dict(record_data)
-                for record_data in records
-            }
-            for collection, records in raw.items()
+    def to_snapshot(self) -> dict[str, list[dict[str, Any]]]:
+        return {
+            collection: [record.to_dict() for record in record_map.values()]
+            for collection, record_map in self._collections.items()
         }
 
-    def _flush(self) -> None:
-        payload = {
-            collection: [record.to_dict() for record in records.values()]
-            for collection, records in self._collections.items()
-        }
-        self.storage_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+    @classmethod
+    def from_snapshot(cls, payload: dict[str, list[dict[str, Any]]] | dict[str, dict[str, Any]]) -> InMemoryVectorStore:
+        collections: dict[str, dict[str, ChunkRecord]] = {}
+        for collection, records in payload.items():
+            if isinstance(records, list):
+                collections[collection] = {
+                    record_data["id"]: ChunkRecord.from_dict(record_data)
+                    for record_data in records
+                }
+                continue
+
+            collections[collection] = {
+                record_id: ChunkRecord.from_dict(record_data)
+                for record_id, record_data in records.items()
+            }
+        return cls(initial_collections=collections)

@@ -8,9 +8,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.adapters.embedding.fake_embedding import FakeEmbedding
-from src.adapters.loader.text_loader import TextLoader
-from src.adapters.vector_store.in_memory_store import InMemoryVectorStore
+from src.adapters.embedding.base_embedding import BaseEmbedding
+from src.adapters.loader.base_loader import BaseLoader
+from src.adapters.vector_store.base_vector_store import BaseVectorStore
 from src.core.settings import Settings
 from src.core.trace import TraceContext
 from src.core.types import Chunk, ChunkRecord, Document
@@ -34,9 +34,9 @@ class IngestService:
     def __init__(
         self,
         settings: Settings,
-        loader: TextLoader,
-        embedding: FakeEmbedding,
-        vector_store: InMemoryVectorStore,
+        loader: BaseLoader,
+        embedding: BaseEmbedding,
+        vector_store: BaseVectorStore,
         trace_store: TraceStore | None = None,
     ) -> None:
         self.settings = settings
@@ -161,4 +161,3 @@ class IngestService:
             chunk_index += 1
             if end >= len(text):
                 break
-

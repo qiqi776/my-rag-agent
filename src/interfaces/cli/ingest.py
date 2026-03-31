@@ -5,9 +5,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from src.adapters.embedding.fake_embedding import FakeEmbedding
-from src.adapters.loader.text_loader import TextLoader
-from src.adapters.vector_store.in_memory_store import InMemoryVectorStore
+from src.adapters.embedding.factory import create_embedding
+from src.adapters.loader.factory import create_loader
+from src.adapters.vector_store.factory import create_vector_store
 from src.application.ingest_service import IngestService
 from src.core.errors import ConfigError, UnsupportedFileTypeError
 from src.core.settings import load_settings
@@ -32,9 +32,9 @@ def main() -> int:
         settings = load_settings(args.config)
         service = IngestService(
             settings=settings,
-            loader=TextLoader(settings.ingestion.supported_extensions),
-            embedding=FakeEmbedding(settings.adapters.embedding.dimensions),
-            vector_store=InMemoryVectorStore(settings.adapters.vector_store.storage_path),
+            loader=create_loader(settings),
+            embedding=create_embedding(settings),
+            vector_store=create_vector_store(settings),
             trace_store=TraceStore(settings.observability.trace_file)
             if settings.observability.trace_enabled
             else None,

@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from src.adapters.vector_store.in_memory_store import InMemoryVectorStore
+from src.adapters.vector_store.factory import create_vector_store
+from src.core.settings import load_settings
 from src.interfaces.cli.documents import main as docs_main
 from src.interfaces.cli.ingest import main as ingest_main
 from src.interfaces.cli.query import main as query_main
@@ -33,7 +34,7 @@ adapters:
     provider: "fake"
     dimensions: 16
   vector_store:
-    provider: "memory"
+    provider: "local_json"
     storage_path: "{storage_path}"
 observability:
   trace_enabled: true
@@ -93,7 +94,8 @@ def test_cli_mvp_ingest_query_and_document_lifecycle(
     assert "returned=1" in query_output
     assert "python.txt" in query_output
 
-    records = InMemoryVectorStore(storage_path).list_records("knowledge")
+    settings = load_settings(config_path)
+    records = create_vector_store(settings).list_records("knowledge")
     assert records
     doc_id = records[0].doc_id
 

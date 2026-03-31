@@ -6,14 +6,20 @@ import hashlib
 import math
 import re
 
+from src.adapters.embedding.base_embedding import BaseEmbedding
 
-class FakeEmbedding:
+
+class FakeEmbedding(BaseEmbedding):
     """Generate deterministic dense vectors without external services."""
 
     def __init__(self, dimensions: int = 16) -> None:
         if dimensions <= 0:
             raise ValueError("dimensions must be > 0")
-        self.dimensions = dimensions
+        self._dimensions = dimensions
+
+    @property
+    def dimensions(self) -> int:
+        return self._dimensions
 
     def embed_text(self, text: str) -> list[float]:
         vector = [0.0] * self.dimensions
@@ -35,4 +41,3 @@ class FakeEmbedding:
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         return [self.embed_text(text) for text in texts]
-

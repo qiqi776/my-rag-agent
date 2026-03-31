@@ -5,11 +5,12 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+from src.adapters.loader.base_loader import BaseLoader
 from src.core.errors import UnsupportedFileTypeError
 from src.core.types import Document
 
 
-class TextLoader:
+class TextLoader(BaseLoader):
     """Load `.txt` and `.md` documents from local storage."""
 
     def __init__(self, supported_extensions: list[str]) -> None:
@@ -34,4 +35,3 @@ class TextLoader:
                 "doc_type": suffix.lstrip("."),
             },
         )
-

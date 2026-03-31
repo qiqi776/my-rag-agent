@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from src.adapters.vector_store.in_memory_store import InMemoryVectorStore
+from src.adapters.vector_store.factory import create_vector_store
 from src.application.document_service import DocumentService
 from src.core.errors import ConfigError
 from src.core.settings import load_settings
@@ -41,7 +41,7 @@ def main() -> int:
         settings = load_settings(args.config)
         service = DocumentService(
             settings=settings,
-            vector_store=InMemoryVectorStore(settings.adapters.vector_store.storage_path),
+            vector_store=create_vector_store(settings),
         )
     except ConfigError as exc:
         print(f"[ERROR] {exc}")

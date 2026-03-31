@@ -22,7 +22,7 @@ adapters:
     provider: "fake"
     dimensions: 16
   vector_store:
-    provider: "memory"
+    provider: "local_json"
     storage_path: "./data/db/vector_store.json"
 
 observability:

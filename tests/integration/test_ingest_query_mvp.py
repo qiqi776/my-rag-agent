@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from src.adapters.embedding.fake_embedding import FakeEmbedding
-from src.adapters.loader.text_loader import TextLoader
-from src.adapters.vector_store.in_memory_store import InMemoryVectorStore
+from src.adapters.embedding.factory import create_embedding
+from src.adapters.loader.factory import create_loader
+from src.adapters.vector_store.factory import create_vector_store
 from src.application.ingest_service import IngestService
 from src.application.search_service import SearchService
 from src.core.settings import load_settings
@@ -36,7 +36,7 @@ adapters:
     provider: "fake"
     dimensions: 16
   vector_store:
-    provider: "memory"
+    provider: "local_json"
     storage_path: "{storage_path}"
 observability:
   trace_enabled: true
@@ -66,22 +66,18 @@ def test_ingest_then_query_returns_relevant_chunks_and_traces(tmp_path: Path) ->
         encoding="utf-8",
     )
 
-    trace_store = TraceStore(trace_path)
-    vector_store = InMemoryVectorStore(storage_path)
-    embedding = FakeEmbedding(settings.adapters.embedding.dimensions)
-
     ingest_service = IngestService(
         settings=settings,
-        loader=TextLoader(settings.ingestion.supported_extensions),
-        embedding=embedding,
-        vector_store=vector_store,
-        trace_store=trace_store,
+        loader=create_loader(settings),
+        embedding=create_embedding(settings),
+        vector_store=create_vector_store(settings),
+        trace_store=TraceStore(trace_path),
     )
     search_service = SearchService(
         settings=settings,
-        embedding=embedding,
-        vector_store=vector_store,
-        trace_store=trace_store,
+        embedding=create_embedding(settings),
+        vector_store=create_vector_store(settings),
+        trace_store=TraceStore(trace_path),
     )
 
     ingest_results = ingest_service.ingest_path(docs_dir, collection="knowledge")
@@ -95,3 +91,38 @@ def test_ingest_then_query_returns_relevant_chunks_and_traces(tmp_path: Path) ->
     assert len(trace_lines) == 3
     parsed = [json.loads(line) for line in trace_lines]
     assert {item["trace_type"] for item in parsed} == {"ingestion", "query"}
+
+
+@pytest.mark.integration
+def test_factory_wiring_supports_cross_instance_query(tmp_path: Path) -> None:
+    config_path = tmp_path / "settings.yaml"
+    storage_path = tmp_path / "store.json"
+    trace_path = tmp_path / "trace.jsonl"
+    _write_settings(config_path, storage_path, trace_path)
+    settings = load_settings(config_path)
+
+    text_file = tmp_path / "python.txt"
+    text_file.write_text(
+        "Python retrieval systems use embeddings for semantic search.",
+        encoding="utf-8",
+    )
+
+    ingest_service = IngestService(
+        settings=settings,
+        loader=create_loader(settings),
+        embedding=create_embedding(settings),
+        vector_store=create_vector_store(settings),
+        trace_store=TraceStore(trace_path),
+    )
+    search_service = SearchService(
+        settings=settings,
+        embedding=create_embedding(settings),
+        vector_store=create_vector_store(settings),
+        trace_store=TraceStore(trace_path),
+    )
+
+    ingest_service.ingest_path(text_file, collection="knowledge")
+    response = search_service.search("semantic embeddings", collection="knowledge", top_k=1)
+
+    assert response.results
+    assert response.results[0].metadata["source_path"].endswith("python.txt")

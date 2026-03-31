@@ -58,7 +58,7 @@ def test_search_service_rejects_empty_query(tmp_path: Path) -> None:
     service = SearchService(
         settings=settings,
         embedding=FakeEmbedding(settings.adapters.embedding.dimensions),
-        vector_store=InMemoryVectorStore(storage_path),
+        vector_store=InMemoryVectorStore(),
         trace_store=TraceStore(trace_path),
     )
 
@@ -81,7 +81,7 @@ def test_ingest_service_creates_deterministic_chunk_ids(tmp_path: Path) -> None:
         settings=settings,
         loader=TextLoader(settings.ingestion.supported_extensions),
         embedding=FakeEmbedding(settings.adapters.embedding.dimensions),
-        vector_store=InMemoryVectorStore(storage_path),
+        vector_store=InMemoryVectorStore(),
         trace_store=TraceStore(trace_path),
     )
 
@@ -90,4 +90,3 @@ def test_ingest_service_creates_deterministic_chunk_ids(tmp_path: Path) -> None:
 
     assert first.doc_id == second.doc_id
     assert first.chunk_count == second.chunk_count
-

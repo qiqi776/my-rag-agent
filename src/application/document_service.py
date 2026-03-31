@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.adapters.vector_store.in_memory_store import InMemoryVectorStore
+from src.adapters.vector_store.base_vector_store import BaseVectorStore
 from src.core.settings import Settings
 
 
@@ -34,7 +34,7 @@ class DeleteDocumentResult:
 class DocumentService:
     """Expose list and delete operations over stored documents."""
 
-    def __init__(self, settings: Settings, vector_store: InMemoryVectorStore) -> None:
+    def __init__(self, settings: Settings, vector_store: BaseVectorStore) -> None:
         self.settings = settings
         self.vector_store = vector_store
 

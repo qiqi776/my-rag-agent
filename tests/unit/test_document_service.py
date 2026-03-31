@@ -71,7 +71,7 @@ def test_document_service_lists_documents_across_collections(tmp_path: Path) -> 
     _write_settings(config_path, storage_path)
     settings = load_settings(config_path)
 
-    store = InMemoryVectorStore(storage_path)
+    store = InMemoryVectorStore()
     store.upsert(
         "alpha",
         [
@@ -105,7 +105,7 @@ def test_document_service_delete_only_removes_target_collection(tmp_path: Path) 
     _write_settings(config_path, storage_path)
     settings = load_settings(config_path)
 
-    store = InMemoryVectorStore(storage_path)
+    store = InMemoryVectorStore()
     store.upsert("alpha", [_record("a-1", "doc-a", "alpha", 0, "/tmp/alpha.txt")])
     store.upsert("beta", [_record("b-1", "doc-a", "beta", 0, "/tmp/alpha.txt")])
     service = DocumentService(settings=settings, vector_store=store)

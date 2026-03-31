@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from src.adapters.embedding.fake_embedding import FakeEmbedding
-from src.adapters.loader.text_loader import TextLoader
-from src.adapters.vector_store.in_memory_store import InMemoryVectorStore
+from src.adapters.embedding.factory import create_embedding
+from src.adapters.loader.factory import create_loader
+from src.adapters.vector_store.factory import create_vector_store
 from src.application.document_service import DocumentService
 from src.application.ingest_service import IngestService
 from src.application.search_service import SearchService
@@ -36,7 +36,7 @@ adapters:
     provider: "fake"
     dimensions: 16
   vector_store:
-    provider: "memory"
+    provider: "local_json"
     storage_path: "{storage_path}"
 observability:
   trace_enabled: true
@@ -61,19 +61,24 @@ def test_duplicate_ingestion_is_idempotent_in_document_listing(tmp_path: Path) -
         encoding="utf-8",
     )
 
-    vector_store = InMemoryVectorStore(storage_path)
-    embedding = FakeEmbedding(settings.adapters.embedding.dimensions)
-    ingest_service = IngestService(
+    first_ingest_service = IngestService(
         settings=settings,
-        loader=TextLoader(settings.ingestion.supported_extensions),
-        embedding=embedding,
-        vector_store=vector_store,
+        loader=create_loader(settings),
+        embedding=create_embedding(settings),
+        vector_store=create_vector_store(settings),
         trace_store=TraceStore(trace_path),
     )
-    document_service = DocumentService(settings=settings, vector_store=vector_store)
+    second_ingest_service = IngestService(
+        settings=settings,
+        loader=create_loader(settings),
+        embedding=create_embedding(settings),
+        vector_store=create_vector_store(settings),
+        trace_store=TraceStore(trace_path),
+    )
+    document_service = DocumentService(settings=settings, vector_store=create_vector_store(settings))
 
-    first = ingest_service.ingest_path(text_file, collection="knowledge")
-    second = ingest_service.ingest_path(text_file, collection="knowledge")
+    first = first_ingest_service.ingest_path(text_file, collection="knowledge")
+    second = second_ingest_service.ingest_path(text_file, collection="knowledge")
     documents = document_service.list_documents("knowledge")
 
     assert first[0].doc_id == second[0].doc_id
@@ -95,31 +100,35 @@ def test_delete_document_keeps_other_collection_searchable(tmp_path: Path) -> No
         encoding="utf-8",
     )
 
-    vector_store = InMemoryVectorStore(storage_path)
-    embedding = FakeEmbedding(settings.adapters.embedding.dimensions)
     trace_store = TraceStore(trace_path)
     ingest_service = IngestService(
         settings=settings,
-        loader=TextLoader(settings.ingestion.supported_extensions),
-        embedding=embedding,
-        vector_store=vector_store,
+        loader=create_loader(settings),
+        embedding=create_embedding(settings),
+        vector_store=create_vector_store(settings),
         trace_store=trace_store,
     )
 
     ingest_result = ingest_service.ingest_path(text_file, collection="alpha")[0]
-    ingest_service.ingest_path(text_file, collection="beta")
+    IngestService(
+        settings=settings,
+        loader=create_loader(settings),
+        embedding=create_embedding(settings),
+        vector_store=create_vector_store(settings),
+        trace_store=trace_store,
+    ).ingest_path(text_file, collection="beta")
 
     document_service = DocumentService(
         settings=settings,
-        vector_store=InMemoryVectorStore(storage_path),
+        vector_store=create_vector_store(settings),
     )
     delete_result = document_service.delete_document(ingest_result.doc_id, collection="alpha")
     alpha_docs = document_service.list_documents("alpha")
     beta_docs = document_service.list_documents("beta")
     search_service = SearchService(
         settings=settings,
-        embedding=embedding,
-        vector_store=InMemoryVectorStore(storage_path),
+        embedding=create_embedding(settings),
+        vector_store=create_vector_store(settings),
         trace_store=trace_store,
     )
     beta_response = search_service.search("semantic embeddings", collection="beta", top_k=1)

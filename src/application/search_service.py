@@ -5,8 +5,8 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
-from src.adapters.embedding.fake_embedding import FakeEmbedding
-from src.adapters.vector_store.in_memory_store import InMemoryVectorStore
+from src.adapters.embedding.base_embedding import BaseEmbedding
+from src.adapters.vector_store.base_vector_store import BaseVectorStore
 from src.core.errors import EmptyQueryError
 from src.core.settings import Settings
 from src.core.trace import TraceContext
@@ -29,8 +29,8 @@ class SearchService:
     def __init__(
         self,
         settings: Settings,
-        embedding: FakeEmbedding,
-        vector_store: InMemoryVectorStore,
+        embedding: BaseEmbedding,
+        vector_store: BaseVectorStore,
         trace_store: TraceStore | None = None,
     ) -> None:
         self.settings = settings
@@ -91,4 +91,3 @@ class SearchService:
             self.trace_store.append(trace)
 
         return SearchResponse(query=processed, results=results)
-
