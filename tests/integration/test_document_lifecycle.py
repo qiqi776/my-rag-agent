@@ -137,4 +137,5 @@ def test_delete_document_keeps_other_collection_searchable(tmp_path: Path) -> No
     assert alpha_docs == []
     assert len(beta_docs) == 1
     assert beta_response.results
-    assert beta_response.results[0].metadata["source_path"].endswith("python.txt")
+    assert beta_response.results[0].source_path.endswith("python.txt")
+    assert beta_response.citations[0].collection == "beta"

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from src.adapters.vector_store.base_vector_store import BaseVectorStore
 from src.core.settings import Settings
+from src.core.types import Metadata
 
 
 @dataclass(slots=True)
@@ -16,6 +17,9 @@ class DocumentSummary:
     source_path: str
     collection: str
     chunk_count: int
+
+    def to_dict(self) -> Metadata:
+        return asdict(self)
 
 
 @dataclass(slots=True)
@@ -29,6 +33,11 @@ class DeleteDocumentResult:
     @property
     def deleted(self) -> bool:
         return self.deleted_chunks > 0
+
+    def to_dict(self) -> Metadata:
+        payload = asdict(self)
+        payload["deleted"] = self.deleted
+        return payload
 
 
 class DocumentService:

@@ -1,6 +1,6 @@
 # Minimal Modular RAG Project
 
-当前仓库处于 M3：在 M2 provider 抽象的基础上，已经补齐稀疏检索和 RRF 融合，支持 dense-only 与 hybrid retrieval。
+当前仓库处于 M4：在 M3 hybrid retrieval 的基础上，已经补齐稳定的 response schema 和 citations，并保留文档生命周期的 list/delete 契约。
 
 - 中文规格文档：`specs/minimal-modular-rag-project.md`
 - Python 工程配置：`pyproject.toml`
@@ -13,8 +13,8 @@
 当前已经完成的能力：
 
 - `load -> split -> embed -> store` 的本地文本摄取链路
-- `query -> dense retrieve -> top_k response` 的查询链路
-- `query -> dense retrieve -> sparse retrieve -> RRF fuse` 的 hybrid 查询链路
+- `query -> dense retrieve -> SearchOutput` 的查询链路
+- `query -> dense retrieve -> sparse retrieve -> RRF fuse -> SearchOutput` 的 hybrid 查询链路
 - 基于 JSONL 的 ingestion / query traces
 - 文档生命周期操作：`list` / `delete`
 - CLI 入口：`mrag-ingest`、`mrag-query`、`mrag-docs`
@@ -22,6 +22,7 @@
 - factory 装配：CLI 通过配置选择具体 provider
 - sparse retrieval 组件：`SparseRetriever`
 - fusion 组件：`rrf_fuse`
+- response 组件：`ResponseBuilder`、`SearchOutput`、`Citation`
 
 当前内置 provider：
 
@@ -45,6 +46,7 @@
 
 - MCP / HTTP 接口
 - Rerank
+- LLM answer synthesis
 - 多模态处理
 - Dashboard / Evaluation
 
@@ -66,6 +68,7 @@ uv sync --extra dev
 
 默认配置中的 vector store provider 是 `local_json`，因此 CLI 多次运行之间会复用本地快照。
 默认 retrieval mode 是 `dense`，也可以通过配置或 CLI 参数切换成 `hybrid`。
+查询服务现在输出稳定的 `SearchOutput` 结构，包含 `results` 和 `citations`，后续可直接复用于 CLI、MCP 或 HTTP 接口。
 
 示例命令：
 
@@ -88,7 +91,7 @@ uv run ruff check .
 
 - 新增真实 embedding provider，并通过 `src/adapters/embedding/factory.py` 接入
 - 新增真实 vector store 后端，并实现 `BaseVectorStore`
-- 在不改 application 层的前提下接入 rerank、response builder、MCP
+- 在不改 application 层的前提下接入 rerank、MCP、HTTP
 
 详细需求、边界和后续里程碑请参考：
 

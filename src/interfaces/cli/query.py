@@ -71,15 +71,15 @@ def main() -> int:
 
     print(
         f"[OK] mode={response.retrieval_mode} "
-        f"query='{response.query.normalized_query}' "
-        f"collection={response.query.collection} "
-        f"returned={len(response.results)}"
+        f"query='{response.normalized_query}' "
+        f"collection={response.collection} "
+        f"returned={response.result_count}"
     )
-    for index, result in enumerate(response.results, start=1):
+    for result in response.results:
         snippet = result.text.replace("\n", " ")[:120]
         print(
-            f"{index:02d}. score={result.score:.4f} chunk_id={result.chunk_id} "
-            f"source={result.metadata.get('source_path', '')}"
+            f"{result.rank:02d}. score={result.score:.4f} chunk_id={result.chunk_id} "
+            f"source={result.source_path}"
         )
         print(f"    {snippet}")
     return 0

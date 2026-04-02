@@ -3,27 +3,18 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
 
 from src.adapters.embedding.base_embedding import BaseEmbedding
 from src.adapters.vector_store.base_vector_store import BaseVectorStore
 from src.core.errors import EmptyQueryError, UnsupportedRetrievalModeError
 from src.core.settings import Settings
 from src.core.trace import TraceContext
-from src.core.types import ProcessedQuery, RetrievalResult
+from src.core.types import ProcessedQuery
 from src.observability.logger import get_logger
 from src.observability.trace_store import TraceStore
+from src.response.response_builder import ResponseBuilder, SearchOutput
 from src.retrieval.fusion import rrf_fuse
 from src.retrieval.sparse_retriever import SparseRetriever
-
-
-@dataclass(slots=True)
-class SearchResponse:
-    """Structured search response for the current retrieval mode."""
-
-    query: ProcessedQuery
-    results: list[RetrievalResult]
-    retrieval_mode: str
 
 
 class SearchService:
@@ -35,12 +26,14 @@ class SearchService:
         embedding: BaseEmbedding,
         vector_store: BaseVectorStore,
         sparse_retriever: SparseRetriever | None = None,
+        response_builder: ResponseBuilder | None = None,
         trace_store: TraceStore | None = None,
     ) -> None:
         self.settings = settings
         self.embedding = embedding
         self.vector_store = vector_store
         self.sparse_retriever = sparse_retriever
+        self.response_builder = response_builder or ResponseBuilder()
         self.trace_store = trace_store
         self.logger = get_logger("minimal-rag.search", settings.observability.log_level)
 
@@ -50,7 +43,7 @@ class SearchService:
         collection: str | None = None,
         top_k: int | None = None,
         mode: str | None = None,
-    ) -> SearchResponse:
+    ) -> SearchOutput:
         """Execute dense-only or hybrid retrieval."""
 
         normalized = query.strip()
@@ -160,7 +153,7 @@ class SearchService:
         if self.trace_store is not None:
             self.trace_store.append(trace)
 
-        return SearchResponse(
+        return self.response_builder.build(
             query=processed,
             results=final_results,
             retrieval_mode=retrieval_mode,

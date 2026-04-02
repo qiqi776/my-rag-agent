@@ -96,6 +96,12 @@ def test_document_service_lists_documents_across_collections(tmp_path: Path) -> 
         ("alpha", "doc-b", 1),
         ("beta", "doc-c", 1),
     ]
+    assert documents[0].to_dict() == {
+        "doc_id": "doc-a",
+        "source_path": "/tmp/alpha.txt",
+        "collection": "alpha",
+        "chunk_count": 2,
+    }
 
 
 @pytest.mark.unit
@@ -114,6 +120,12 @@ def test_document_service_delete_only_removes_target_collection(tmp_path: Path) 
 
     assert result.deleted
     assert result.deleted_chunks == 1
+    assert result.to_dict() == {
+        "doc_id": "doc-a",
+        "collection": "alpha",
+        "deleted_chunks": 1,
+        "deleted": True,
+    }
     assert service.list_documents("alpha") == []
     assert [(item.collection, item.doc_id) for item in service.list_documents("beta")] == [
         ("beta", "doc-a")

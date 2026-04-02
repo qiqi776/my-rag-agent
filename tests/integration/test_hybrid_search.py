@@ -101,8 +101,9 @@ def test_hybrid_search_runs_sparse_retrieval_and_rrf_fusion(tmp_path: Path) -> N
 
     assert response.retrieval_mode == "hybrid"
     assert response.results
-    assert response.results[0].metadata["source_path"].endswith("hybrid.txt")
+    assert response.results[0].source_path.endswith("hybrid.txt")
     assert set(response.results[0].metadata["rrf_sources"]) == {"dense", "sparse"}
+    assert response.citations[0].source_path.endswith("hybrid.txt")
 
     query_trace = json.loads(trace_path.read_text(encoding="utf-8").strip().splitlines()[-1])
     assert [stage["stage"] for stage in query_trace["stages"]] == [
@@ -155,6 +156,7 @@ def test_dense_mode_override_still_works_with_hybrid_capable_setup(tmp_path: Pat
     assert response.retrieval_mode == "dense"
     assert response.results
     assert "rrf_sources" not in response.results[0].metadata
+    assert response.citations[0].collection == "knowledge"
 
     query_trace = json.loads(trace_path.read_text(encoding="utf-8").strip().splitlines()[-1])
     assert [stage["stage"] for stage in query_trace["stages"]] == [

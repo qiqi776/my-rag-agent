@@ -85,7 +85,9 @@ def test_ingest_then_query_returns_relevant_chunks_and_traces(tmp_path: Path) ->
 
     assert len(ingest_results) == 2
     assert response.results
-    assert response.results[0].metadata["source_path"].endswith("python.txt")
+    assert response.results[0].source_path.endswith("python.txt")
+    assert response.citations[0].source_path.endswith("python.txt")
+    assert response.result_count == len(response.results)
 
     trace_lines = trace_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(trace_lines) == 3
@@ -125,4 +127,4 @@ def test_factory_wiring_supports_cross_instance_query(tmp_path: Path) -> None:
     response = search_service.search("semantic embeddings", collection="knowledge", top_k=1)
 
     assert response.results
-    assert response.results[0].metadata["source_path"].endswith("python.txt")
+    assert response.results[0].source_path.endswith("python.txt")

@@ -11,6 +11,7 @@ from src.application.ingest_service import IngestService
 from src.application.search_service import SearchService
 from src.core.errors import EmptyQueryError
 from src.core.settings import load_settings
+from src.core.types import ChunkRecord
 from src.observability.trace_store import TraceStore
 
 
@@ -64,6 +65,49 @@ def test_search_service_rejects_empty_query(tmp_path: Path) -> None:
 
     with pytest.raises(EmptyQueryError):
         service.search("   ")
+
+
+@pytest.mark.unit
+def test_search_service_returns_stable_response_output(tmp_path: Path) -> None:
+    config_path = tmp_path / "settings.yaml"
+    storage_path = tmp_path / "store.json"
+    trace_path = tmp_path / "trace.jsonl"
+    _write_settings(config_path, storage_path, trace_path)
+    settings = load_settings(config_path)
+
+    store = InMemoryVectorStore()
+    store.upsert(
+        "knowledge",
+        [
+            ChunkRecord(
+                id="chunk-1",
+                doc_id="doc-1",
+                text="semantic embeddings support retrieval",
+                embedding=[1.0] * settings.adapters.embedding.dimensions,
+                metadata={
+                    "source_path": str((tmp_path / "doc.txt").resolve()),
+                    "collection": "knowledge",
+                    "chunk_index": 0,
+                },
+            )
+        ],
+    )
+
+    service = SearchService(
+        settings=settings,
+        embedding=FakeEmbedding(settings.adapters.embedding.dimensions),
+        vector_store=store,
+        trace_store=TraceStore(trace_path),
+    )
+
+    response = service.search("semantic embeddings", collection="knowledge", top_k=1)
+
+    assert response.query == "semantic embeddings"
+    assert response.normalized_query == "semantic embeddings"
+    assert response.collection == "knowledge"
+    assert response.result_count == 1
+    assert response.results[0].rank == 1
+    assert response.citations[0].chunk_id == "chunk-1"
 
 
 @pytest.mark.unit
