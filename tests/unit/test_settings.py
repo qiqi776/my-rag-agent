@@ -8,7 +8,11 @@ from src.core.errors import ConfigError
 from src.core.settings import load_settings
 
 
-def _write_settings(path: Path, chunk_overlap: int = 50) -> None:
+def _write_settings(
+    path: Path,
+    chunk_overlap: int = 50,
+    retrieval_mode: str = "dense",
+) -> None:
     path.write_text(
         f"""
 project:
@@ -22,7 +26,10 @@ ingestion:
     - ".txt"
     - ".md"
 retrieval:
+  mode: "{retrieval_mode}"
   dense_top_k: 5
+  sparse_top_k: 5
+  rrf_k: 60
 adapters:
   loader:
     provider: "text"
@@ -51,6 +58,9 @@ def test_load_settings_success(tmp_path: Path) -> None:
     assert settings.project.name == "minimal-modular-rag"
     assert settings.ingestion.chunk_size == 500
     assert settings.adapters.embedding.dimensions == 16
+    assert settings.retrieval.mode == "dense"
+    assert settings.retrieval.sparse_top_k == 5
+    assert settings.retrieval.rrf_k == 60
 
 
 @pytest.mark.unit
@@ -61,3 +71,11 @@ def test_load_settings_rejects_invalid_overlap(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="chunk_overlap"):
         load_settings(config_path)
 
+
+@pytest.mark.unit
+def test_load_settings_rejects_invalid_retrieval_mode(tmp_path: Path) -> None:
+    config_path = tmp_path / "settings.yaml"
+    _write_settings(config_path, retrieval_mode="unknown")
+
+    with pytest.raises(ConfigError, match="retrieval.mode"):
+        load_settings(config_path)

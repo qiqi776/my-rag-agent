@@ -18,3 +18,6 @@ class UnsupportedFileTypeError(MinimalRAGError):
 class EmptyQueryError(MinimalRAGError):
     """Raised when a query is empty or only whitespace."""
 
+
+class UnsupportedRetrievalModeError(MinimalRAGError):
+    """Raised when a retrieval mode is not supported."""

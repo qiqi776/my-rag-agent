@@ -13,7 +13,10 @@ ingestion:
     - ".md"
 
 retrieval:
+  mode: "dense"
   dense_top_k: 5
+  sparse_top_k: 5
+  rrf_k: 60
 
 adapters:
   loader:

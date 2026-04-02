@@ -23,7 +23,11 @@ def resolve_path(path: str | Path) -> Path:
     return (REPO_ROOT / candidate).resolve()
 
 
-def _require_mapping(data: dict[str, Any], key: str, parent: str = "settings") -> dict[str, Any]:
+def _require_mapping(
+    data: dict[str, Any],
+    key: str,
+    parent: str = "settings",
+) -> dict[str, Any]:
     value = data.get(key)
     if not isinstance(value, dict):
         raise ConfigError(f"Missing or invalid mapping: {parent}.{key}")
@@ -75,6 +79,9 @@ class IngestionSettings:
 @dataclass(frozen=True, slots=True)
 class RetrievalSettings:
     dense_top_k: int
+    mode: str = "dense"
+    sparse_top_k: int = 5
+    rrf_k: int = 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,6 +141,25 @@ class Settings:
         if chunk_overlap < 0 or chunk_overlap >= chunk_size:
             raise ConfigError("ingestion.chunk_overlap must be >= 0 and < chunk_size")
 
+        dense_top_k = _require_int(retrieval, "dense_top_k", "retrieval")
+        if dense_top_k <= 0:
+            raise ConfigError("retrieval.dense_top_k must be > 0")
+
+        retrieval_mode_raw = retrieval.get("mode", "dense")
+        if not isinstance(retrieval_mode_raw, str):
+            raise ConfigError("retrieval.mode must be one of: dense, hybrid")
+        retrieval_mode = retrieval_mode_raw.strip().lower()
+        if retrieval_mode not in {"dense", "hybrid"}:
+            raise ConfigError("retrieval.mode must be one of: dense, hybrid")
+
+        sparse_top_k = retrieval.get("sparse_top_k", dense_top_k)
+        if not isinstance(sparse_top_k, int) or sparse_top_k <= 0:
+            raise ConfigError("retrieval.sparse_top_k must be > 0")
+
+        rrf_k = retrieval.get("rrf_k", 60)
+        if not isinstance(rrf_k, int) or rrf_k <= 0:
+            raise ConfigError("retrieval.rrf_k must be > 0")
+
         loader = _require_mapping(adapters, "loader", "adapters")
         embedding = _require_mapping(adapters, "embedding", "adapters")
         vector_store = _require_mapping(adapters, "vector_store", "adapters")
@@ -145,16 +171,23 @@ class Settings:
             ),
             ingestion=IngestionSettings(
                 default_collection=_require_str(
-                    ingestion, "default_collection", "ingestion"
+                    ingestion,
+                    "default_collection",
+                    "ingestion",
                 ),
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
                 supported_extensions=_require_list(
-                    ingestion, "supported_extensions", "ingestion"
+                    ingestion,
+                    "supported_extensions",
+                    "ingestion",
                 ),
             ),
             retrieval=RetrievalSettings(
-                dense_top_k=_require_int(retrieval, "dense_top_k", "retrieval")
+                dense_top_k=dense_top_k,
+                mode=retrieval_mode,
+                sparse_top_k=sparse_top_k,
+                rrf_k=rrf_k,
             ),
             adapters=AdapterSettings(
                 loader=LoaderAdapterSettings(
@@ -166,7 +199,9 @@ class Settings:
                 ),
                 vector_store=VectorStoreAdapterSettings(
                     provider=_require_str(
-                        vector_store, "provider", "adapters.vector_store"
+                        vector_store,
+                        "provider",
+                        "adapters.vector_store",
                     ),
                     storage_path=str(
                         vector_store.get("storage_path", "./data/db/vector_store.json")
@@ -175,10 +210,20 @@ class Settings:
             ),
             observability=ObservabilitySettings(
                 trace_enabled=_require_bool(
-                    observability, "trace_enabled", "observability"
+                    observability,
+                    "trace_enabled",
+                    "observability",
                 ),
-                trace_file=_require_str(observability, "trace_file", "observability"),
-                log_level=_require_str(observability, "log_level", "observability"),
+                trace_file=_require_str(
+                    observability,
+                    "trace_file",
+                    "observability",
+                ),
+                log_level=_require_str(
+                    observability,
+                    "log_level",
+                    "observability",
+                ),
             ),
         )
 
