@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-TraceType = Literal["ingestion", "query"]
+TraceType = Literal["ingestion", "query", "answer"]
 
 
 @dataclass(slots=True)
@@ -49,4 +49,3 @@ class TraceContext:
             "metadata": self.metadata,
             "stages": self.stages,
         }
-

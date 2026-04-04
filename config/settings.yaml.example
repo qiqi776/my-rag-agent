@@ -18,6 +18,10 @@ retrieval:
   sparse_top_k: 5
   rrf_k: 60
 
+generation:
+  max_context_results: 3
+  max_answer_chars: 400
+
 adapters:
   loader:
     provider: "text"
@@ -27,6 +31,10 @@ adapters:
   vector_store:
     provider: "local_json"
     storage_path: "./data/db/vector_store.json"
+  llm:
+    provider: "fake"
+  reranker:
+    provider: "fake"
 
 observability:
   trace_enabled: true

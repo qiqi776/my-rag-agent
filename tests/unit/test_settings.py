@@ -30,6 +30,9 @@ retrieval:
   dense_top_k: 5
   sparse_top_k: 5
   rrf_k: 60
+generation:
+  max_context_results: 3
+  max_answer_chars: 400
 adapters:
   loader:
     provider: "text"
@@ -39,6 +42,10 @@ adapters:
   vector_store:
     provider: "memory"
     storage_path: "./data/db/vector_store.json"
+  llm:
+    provider: "fake"
+  reranker:
+    provider: "fake"
 observability:
   trace_enabled: true
   trace_file: "./data/traces/app.jsonl"
@@ -61,6 +68,10 @@ def test_load_settings_success(tmp_path: Path) -> None:
     assert settings.retrieval.mode == "dense"
     assert settings.retrieval.sparse_top_k == 5
     assert settings.retrieval.rrf_k == 60
+    assert settings.adapters.llm.provider == "fake"
+    assert settings.adapters.reranker.provider == "fake"
+    assert settings.generation.max_context_results == 3
+    assert settings.generation.max_answer_chars == 400
 
 
 @pytest.mark.unit

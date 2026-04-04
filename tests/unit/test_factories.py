@@ -6,8 +6,12 @@ import pytest
 
 from src.adapters.embedding.base_embedding import BaseEmbedding
 from src.adapters.embedding.factory import create_embedding
+from src.adapters.llm.base_llm import BaseLLM
+from src.adapters.llm.factory import create_llm
 from src.adapters.loader.base_loader import BaseLoader
 from src.adapters.loader.factory import create_loader
+from src.adapters.reranker.base_reranker import BaseReranker
+from src.adapters.reranker.factory import create_reranker
 from src.adapters.vector_store.base_vector_store import BaseVectorStore
 from src.adapters.vector_store.factory import create_vector_store
 from src.adapters.vector_store.in_memory_store import InMemoryVectorStore
@@ -22,6 +26,8 @@ def _write_settings(
     vector_provider: str = "local_json",
     loader_provider: str = "text",
     embedding_provider: str = "fake",
+    llm_provider: str = "fake",
+    reranker_provider: str = "fake",
 ) -> None:
     path.write_text(
         f"""
@@ -46,6 +52,10 @@ adapters:
   vector_store:
     provider: "{vector_provider}"
     storage_path: "{storage_path}"
+  llm:
+    provider: "{llm_provider}"
+  reranker:
+    provider: "{reranker_provider}"
 observability:
   trace_enabled: false
   trace_file: "./data/traces/test.jsonl"
@@ -64,10 +74,14 @@ def test_factories_create_supported_adapters(tmp_path: Path) -> None:
     loader = create_loader(settings)
     embedding = create_embedding(settings)
     vector_store = create_vector_store(settings)
+    llm = create_llm(settings)
+    reranker = create_reranker(settings)
 
     assert isinstance(loader, BaseLoader)
     assert isinstance(embedding, BaseEmbedding)
     assert isinstance(vector_store, BaseVectorStore)
+    assert isinstance(llm, BaseLLM)
+    assert isinstance(reranker, BaseReranker)
     assert isinstance(vector_store, LocalJsonVectorStore)
 
 

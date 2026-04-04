@@ -102,10 +102,28 @@ class VectorStoreAdapterSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class LLMAdapterSettings:
+    provider: str = "fake"
+
+
+@dataclass(frozen=True, slots=True)
+class RerankerAdapterSettings:
+    provider: str = "fake"
+
+
+@dataclass(frozen=True, slots=True)
 class AdapterSettings:
     loader: LoaderAdapterSettings
     embedding: EmbeddingAdapterSettings
     vector_store: VectorStoreAdapterSettings
+    llm: LLMAdapterSettings
+    reranker: RerankerAdapterSettings
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationSettings:
+    max_context_results: int = 3
+    max_answer_chars: int = 400
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +139,7 @@ class Settings:
     ingestion: IngestionSettings
     retrieval: RetrievalSettings
     adapters: AdapterSettings
+    generation: GenerationSettings
     observability: ObservabilitySettings
 
     @classmethod
@@ -132,6 +151,9 @@ class Settings:
         ingestion = _require_mapping(data, "ingestion")
         retrieval = _require_mapping(data, "retrieval")
         adapters = _require_mapping(data, "adapters")
+        generation = data.get("generation", {})
+        if not isinstance(generation, dict):
+            raise ConfigError("generation must be a mapping")
         observability = _require_mapping(data, "observability")
 
         chunk_size = _require_int(ingestion, "chunk_size", "ingestion")
@@ -163,6 +185,20 @@ class Settings:
         loader = _require_mapping(adapters, "loader", "adapters")
         embedding = _require_mapping(adapters, "embedding", "adapters")
         vector_store = _require_mapping(adapters, "vector_store", "adapters")
+        llm = adapters.get("llm", {"provider": "fake"})
+        if not isinstance(llm, dict):
+            raise ConfigError("Missing or invalid mapping: adapters.llm")
+        reranker = adapters.get("reranker", {"provider": "fake"})
+        if not isinstance(reranker, dict):
+            raise ConfigError("Missing or invalid mapping: adapters.reranker")
+
+        max_context_results = generation.get("max_context_results", dense_top_k)
+        if not isinstance(max_context_results, int) or max_context_results <= 0:
+            raise ConfigError("generation.max_context_results must be > 0")
+
+        max_answer_chars = generation.get("max_answer_chars", 400)
+        if not isinstance(max_answer_chars, int) or max_answer_chars <= 0:
+            raise ConfigError("generation.max_answer_chars must be > 0")
 
         return cls(
             project=ProjectSettings(
@@ -207,6 +243,16 @@ class Settings:
                         vector_store.get("storage_path", "./data/db/vector_store.json")
                     ),
                 ),
+                llm=LLMAdapterSettings(
+                    provider=_require_str(llm, "provider", "adapters.llm"),
+                ),
+                reranker=RerankerAdapterSettings(
+                    provider=_require_str(reranker, "provider", "adapters.reranker"),
+                ),
+            ),
+            generation=GenerationSettings(
+                max_context_results=max_context_results,
+                max_answer_chars=max_answer_chars,
             ),
             observability=ObservabilitySettings(
                 trace_enabled=_require_bool(
