@@ -25,6 +25,8 @@ mrag-query = "src.interfaces.cli.query:main"
 mrag-docs = "src.interfaces.cli.documents:main"
 mrag-mcp = "src.interfaces.mcp.server:main"
 mrag-answer = "src.interfaces.cli.answer:main"
+mrag-traces = "src.interfaces.cli.traces:main"
+mrag-eval = "src.interfaces.cli.eval:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

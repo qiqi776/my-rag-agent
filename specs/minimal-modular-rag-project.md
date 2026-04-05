@@ -444,7 +444,7 @@ ingestion trace 建议稳定记录：
    - query: embed_query / dense_retrieve
 
 9. 测试与验收：
-   - tests/unit/*
+   - tests/unit/\*
    - tests/integration/test_ingest_query_mvp.py
      单测先覆盖：
    - core types
@@ -456,12 +456,13 @@ ingestion trace 建议稳定记录：
    - ingest -> query -> trace
 
 10. 文档：
-   - 更新 README
-     明确说明当前只是：
-   - 本地文本 ingest/query MVP
-   - 仅 dense retrieval
-   - 无 provider abstraction
-   - 无 MCP / hybrid / rerank
+
+- 更新 README
+  明确说明当前只是：
+- 本地文本 ingest/query MVP
+- 仅 dense retrieval
+- 无 provider abstraction
+- 无 MCP / hybrid / rerank
 
 约束
 
@@ -908,119 +909,128 @@ ingestion trace 建议稳定记录：
    - deleted
 
 10. 设计 MCP server：
-   - 在 src/interfaces/mcp/server.py 中实现本地 MCP server
-   - 至少包含：
-   - MCPServer
-   - create_mcp_server(config_path)
-   - register_tool(...)
-   - list_tools()
-   - call_tool(name, arguments)
-   - 职责：
-   - 注册 tools
-   - 保存 tool schema
-   - 分发调用
-   - 捕获异常
-   - 做统一错误映射
-   - 错误处理至少覆盖：
-   - 未知 tool
-   - 参数错误
-   - 配置错误
-   - query 为空
-   - retrieval mode 非法
-   - 其他内部错误
-   - 要求：
-   - 不泄露 traceback 到协议输出
-   - 只返回稳定的 MCP error payload
+
+- 在 src/interfaces/mcp/server.py 中实现本地 MCP server
+- 至少包含：
+- MCPServer
+- create_mcp_server(config_path)
+- register_tool(...)
+- list_tools()
+- call_tool(name, arguments)
+- 职责：
+- 注册 tools
+- 保存 tool schema
+- 分发调用
+- 捕获异常
+- 做统一错误映射
+- 错误处理至少覆盖：
+- 未知 tool
+- 参数错误
+- 配置错误
+- query 为空
+- retrieval mode 非法
+- 其他内部错误
+- 要求：
+- 不泄露 traceback 到协议输出
+- 只返回稳定的 MCP error payload
 
 11. 提供本地 smoke CLI：
-   - 在 src/interfaces/mcp/server.py 中提供最小 CLI 入口
-   - 支持：
-   - list-tools
-   - call-tool
-   - 在 pyproject.toml 中注册：
-   - mrag-mcp = "src.interfaces.mcp.server:main"
-   - 这样可以直接本地验证：
-   - uv run mrag-mcp list-tools
-   - uv run mrag-mcp call-tool query_knowledge --arguments-json '{"query":"semantic embeddings","collection":"knowledge"}'
+
+- 在 src/interfaces/mcp/server.py 中提供最小 CLI 入口
+- 支持：
+- list-tools
+- call-tool
+- 在 pyproject.toml 中注册：
+- mrag-mcp = "src.interfaces.mcp.server:main"
+- 这样可以直接本地验证：
+- uv run mrag-mcp list-tools
+- uv run mrag-mcp call-tool query_knowledge --arguments-json '{"query":"semantic embeddings","collection":"knowledge"}'
 
 12. 单元测试清单：
-   - tests/unit/test_mcp_mappers.py
-   - tests/unit/test_query_tool.py
-   - tests/unit/test_list_documents_tool.py
-   - tests/unit/test_delete_document_tool.py
-   - 要覆盖：
-   - SearchOutput 映射后仍保留 citations
-   - document list 映射结构稳定
-   - delete result 映射结构稳定
-   - query tool 正确调用 SearchService
-   - list/delete tool 正确调用 DocumentService
-   - 参数错误能抛出或被捕获成协议错误
+
+- tests/unit/test_mcp_mappers.py
+- tests/unit/test_query_tool.py
+- tests/unit/test_list_documents_tool.py
+- tests/unit/test_delete_document_tool.py
+- 要覆盖：
+- SearchOutput 映射后仍保留 citations
+- document list 映射结构稳定
+- delete result 映射结构稳定
+- query tool 正确调用 SearchService
+- list/delete tool 正确调用 DocumentService
+- 参数错误能抛出或被捕获成协议错误
 
 13. 集成测试清单：
-   - tests/integration/test_mcp_server.py
-   - 至少覆盖：
-   - 先 ingest 文档
-   - 再通过 create_mcp_server() 调用 query_knowledge
-   - 验证返回中有 SearchOutput 结构和 citations
-   - 再调用 list_documents
-   - 再调用 delete_document
-   - 最后验证 missing_tool 会返回错误 payload
-   - 这一步的意义是验证：
-   - MCP 层确实复用了 application services，而不是另起一套逻辑
+
+- tests/integration/test_mcp_server.py
+- 至少覆盖：
+- 先 ingest 文档
+- 再通过 create_mcp_server() 调用 query_knowledge
+- 验证返回中有 SearchOutput 结构和 citations
+- 再调用 list_documents
+- 再调用 delete_document
+- 最后验证 missing_tool 会返回错误 payload
+- 这一步的意义是验证：
+- MCP 层确实复用了 application services，而不是另起一套逻辑
 
 14. E2E 测试清单：
-   - tests/e2e/test_mcp_smoke.py
-   - 至少覆盖：
-   - mrag-mcp list-tools
-   - mrag-mcp call-tool query_knowledge
-   - 目的不是验证完整协议栈，而是验证：
-   - CLI 入口可用
-   - tool registry 可用
-   - structured payload 可用
+
+- tests/e2e/test_mcp_smoke.py
+- 至少覆盖：
+- mrag-mcp list-tools
+- mrag-mcp call-tool query_knowledge
+- 目的不是验证完整协议栈，而是验证：
+- CLI 入口可用
+- tool registry 可用
+- structured payload 可用
 
 15. 文档：
-   - 更新 README
-   - 至少补这些内容：
-   - 当前项目已进入 M5
-   - 当前已支持 CLI + MCP
-   - MCP 层复用：
-   - SearchService
-   - DocumentService
-   - SearchOutput
-   - 新增命令：
-   - mrag-mcp
-   - 当前 MCP 边界：
-   - 本地 in-process tool server
-   - 不是官方 MCP SDK 的 stdio transport
+
+- 更新 README
+- 至少补这些内容：
+- 当前项目已进入 M5
+- 当前已支持 CLI + MCP
+- MCP 层复用：
+- SearchService
+- DocumentService
+- SearchOutput
+- 新增命令：
+- mrag-mcp
+- 当前 MCP 边界：
+- 本地 in-process tool server
+- 不是官方 MCP SDK 的 stdio transport
 
 16. M5 验收标准：
-   - CLI 继续工作
-   - MCP 至少支持：
-   - query
-   - list documents
-   - delete document
-   - SearchService 无需为 MCP 重写
-   - DocumentService 无需为 MCP 重写
-   - SearchOutput 作为共享契约被复用
-   - MCP 层只是协议映射层，不复制 retrieval / response / lifecycle 逻辑
-   - ruff 通过
-   - pytest 通过
+
+- CLI 继续工作
+- MCP 至少支持：
+- query
+- list documents
+- delete document
+- SearchService 无需为 MCP 重写
+- DocumentService 无需为 MCP 重写
+- SearchOutput 作为共享契约被复用
+- MCP 层只是协议映射层，不复制 retrieval / response / lifecycle 逻辑
+- ruff 通过
+- pytest 通过
 
 17. M5 明确不做的项：
-   - 不做 HTTP
-   - 不做官方 MCP SDK stdio transport 全实现
-   - 不做 rerank
-   - 不做 LLM 生成
-   - 不做多模态
-   - 不做 dashboard
-   - 不做 evaluation
-   - 不做 agent loop
+
+- 不做 HTTP
+- 不做官方 MCP SDK stdio transport 全实现
+- 不做 rerank
+- 不做 LLM 生成
+- 不做多模态
+- 不做 dashboard
+- 不做 evaluation
+- 不做 agent loop
 
 18. M5 完成后的残余风险：
-   - 当前 MCP 只是本地协议适配，不是正式 transport 层
-   - 参数校验是轻量级的，不是完整 JSON Schema engine
-   - 错误码还不是协议级完整体系
-   - response contract 虽然能复用，但还不是生成式 answer contract
+
+- 当前 MCP 只是本地协议适配，不是正式 transport 层
+- 参数校验是轻量级的，不是完整 JSON Schema engine
+- 错误码还不是协议级完整体系
+- response contract 虽然能复用，但还不是生成式 answer contract
 
 约束
 
@@ -1163,31 +1173,34 @@ ingestion trace 建议稳定记录：
    - 可选择新增 answer trace type，或在 query trace metadata 中明确 mode
 
 10. 测试：
-   - tests/unit/test_reranker.py
-   - tests/unit/test_fake_llm.py
-   - tests/unit/test_answer_builder.py
-   - tests/unit/test_answer_service.py
-   - tests/integration/test_query_with_generation.py
-   - 至少覆盖：
-   - dense + answer
-   - hybrid + answer
-   - citations 能追溯到 supporting_results
-   - 空结果时返回稳定空答案输出
-   - fake llm / fake reranker 无外网依赖
+
+- tests/unit/test_reranker.py
+- tests/unit/test_fake_llm.py
+- tests/unit/test_answer_builder.py
+- tests/unit/test_answer_service.py
+- tests/integration/test_query_with_generation.py
+- 至少覆盖：
+- dense + answer
+- hybrid + answer
+- citations 能追溯到 supporting_results
+- 空结果时返回稳定空答案输出
+- fake llm / fake reranker 无外网依赖
 
 11. 文档：
-   - 更新 README
-   - 明确项目进入“带生成的 RAG”阶段
-   - 说明 SearchOutput 与 AnswerOutput 的区别
-   - 说明当前 generation 仍然是 fake / stub 级实现
+
+- 更新 README
+- 明确项目进入“带生成的 RAG”阶段
+- 说明 SearchOutput 与 AnswerOutput 的区别
+- 说明当前 generation 仍然是 fake / stub 级实现
 
 12. M6 验收标准：
-   - 支持 retrieve -> rerank -> build answer
-   - dense / hybrid 两条路径都能生成答案
-   - citations 仍然可追溯
-   - 不破坏现有 mrag-query
-   - ruff 通过
-   - pytest 通过
+
+- 支持 retrieve -> rerank -> build answer
+- dense / hybrid 两条路径都能生成答案
+- citations 仍然可追溯
+- 不破坏现有 mrag-query
+- ruff 通过
+- pytest 通过
 
 约束
 
@@ -1220,29 +1233,177 @@ ingestion trace 建议稳定记录：
 
 ### 里程碑 M7：Observability 与 Evaluation
 
-范围：
+目标
 
 - 让 trace 从“能记录”升级到“能分析”
-- 补齐质量评估与可视化入口
+- 补齐 retrieval / answer 的基础评估能力
 - 为后续持续调优建立数据闭环
+- 在不改变当前 retrieval、answer、MCP 主链路职责的前提下新增可观测与回归能力
 
-主要交付物：
+具体任务
 
-- `src/evaluation/`
-- `src/observability/dashboard/` 或 trace explorer
-- query / ingestion trace reader
-- golden test set fixtures
-- quality regression tests
+1. 明确 M7 范围：
+   - 重点做：
+   - trace reader
+   - trace explorer 或 dashboard 的最小文本入口
+   - retrieval regression
+   - answer regression
+   - golden fixtures
+   - 本轮不做：
+   - 重量级 Web dashboard
+   - 真实 LLM-as-judge
+   - 新的 retrieval 算法
+   - 多模态
+   - Agent loop
 
-验收意图：
+2. 新增 trace reader：
+   - src/observability/trace_reader.py
+   - 至少支持：
+   - 读取 JSONL trace
+   - 按 trace_type 过滤
+   - 按 trace_id 查看单次链路
+   - 汇总 stage 耗时
+   - 统计 result_count / answer_chars / 错误与空结果情况
+   - 需要兼容：
+   - ingestion
+   - query
+   - answer
 
-- 可以按 trace 回看一次 query / ingestion 的中间状态
-- 可以对 retrieval / rerank / answer 质量做回归比较
-- 不必强依赖重量级 UI，但至少应具备结构化分析入口
+3. 新增 trace explorer 或最小 dashboard 入口：
+   - 推荐新增：
+   - src/interfaces/cli/traces.py
+   - 或：
+   - src/observability/dashboard/
+   - 至少提供：
+   - mrag-traces list
+   - mrag-traces show <trace_id>
+   - mrag-traces stats
+   - 输出可以先是文本或 JSON，不要求本轮做前端页面
+
+4. 新增 evaluation 目录：
+   - src/evaluation/
+   - 至少拆分：
+   - src/evaluation/fixtures.py
+   - src/evaluation/retrieval_eval.py
+   - src/evaluation/answer_eval.py
+   - 如有必要可增加：
+   - src/evaluation/models.py
+   - 重点是先稳定 fixture 与 runner 契约
+
+5. 定义 golden fixtures：
+   - tests/fixtures/evaluation/
+   - 或 data/evaluation/
+   - retrieval fixture 至少包含：
+   - query
+   - collection
+   - expected_doc_ids 或 expected_chunk_ids
+   - top_k
+   - answer fixture 至少包含：
+   - query
+   - collection
+   - expected_keywords
+   - expected_source_paths
+   - 第一版 fixture 应小而稳定，适合本地回归
+
+6. 实现 retrieval regression：
+   - retrieval_eval.py 至少支持：
+   - 读取 retrieval fixtures
+   - 调用 SearchService
+   - 计算 hit@k
+   - 计算 recall@k
+   - 可选增加 MRR 或简单 rank score
+   - 输出应既可人读，也可程序消费
+   - 不要把评估逻辑塞进 SearchService
+
+7. 实现 answer regression：
+   - answer_eval.py 至少支持：
+   - 读取 answer fixtures
+   - 调用 AnswerService
+   - 检查 answer 非空
+   - 检查 answer 命中 expected_keywords
+   - 检查 citations / supporting_results / source_path 是否合理
+   - 第一版不依赖外部 judge，优先 deterministic checks
+
+8. 新增 evaluation CLI：
+   - 推荐新增：
+   - src/interfaces/cli/eval.py
+   - 在 pyproject.toml 注册：
+   - mrag-eval = "src.interfaces.cli.eval:main"
+   - 至少支持：
+   - mrag-eval retrieval
+   - mrag-eval answer
+   - mrag-eval all
+   - CLI 只负责装配与输出，不承载指标计算逻辑
+
+9. 配置与目录整理：
+   - 如有必要，在 src/core/settings.py 补充 evaluation 路径配置
+   - 若不新增配置，也至少在 README 与 fixture 目录中明确默认位置
+   - trace 与 evaluation 的输入输出路径需要足够清晰，便于本地重复执行
+
+10. 测试：
+
+- tests/unit/test_trace_reader.py
+- tests/unit/test_retrieval_eval.py
+- tests/unit/test_answer_eval.py
+- tests/integration/test_trace_explorer.py
+- tests/integration/test_eval_regression.py
+- 至少覆盖：
+- trace 读取与过滤正确
+- fixture 解析正确
+- retrieval metrics 计算稳定
+- answer regression 结果稳定
+- CLI 能输出固定 summary
+
+11. 文档：
+
+- 更新 README
+- 说明项目进入 M7：Observability 与 Evaluation
+- 说明当前已支持：
+- trace exploration
+- retrieval regression
+- answer regression
+- 说明当前边界：
+- 仍然不是在线 dashboard 平台
+- 仍然不是复杂模型评测框架
+
+12. M7 验收标准：
+
+- 可以读取并分析 ingestion / query / answer traces
+- 可以对 retrieval 质量做回归比较
+- 可以对 answer 输出做基础回归比较
+- fixture 格式稳定
+- CLI 可运行
+- 不改坏现有 mrag-query / mrag-answer / mrag-mcp
+- ruff 通过
+- pytest 通过
+
+约束
+
+- 不要引入重量级前端 dashboard
+- 不要引入真实外部 LLM judge 或复杂在线评估平台
+- 不要在这一阶段继续追加 retrieval / generation 新算法
+- 不要把 evaluation 逻辑塞进 SearchService、AnswerService 或接口层
+- trace reader 与 eval runner 必须建立在现有稳定 trace / response contract 之上
+- 如果执行中断了，就重新审视当前仓库状态后继续完成，不要停在半成品分析
+
+完成前必须执行完整验证
+
+- ./.venv/bin/ruff check .
+- ./.venv/bin/pytest
+
+输出要求
+
+- 直接改代码，不要只给方案
+- 最终说明包括：
+  - 做了什么
+  - trace reader / eval runner 如何复用当前 trace 与 response contract
+  - 当前 residual risks
+  - 验证结果
 
 说明：
 
-- 参考 `MODULAR-RAG-MCP-SERVER` 的做法，evaluation 与 dashboard 应建立在稳定 trace 和 response contract 之上，而不是反过来牵引核心服务设计
+- evaluation 与 dashboard 应建立在稳定 trace 和 response contract 之上，而不是反过来牵引核心服务设计
+- M7 的重点不是“继续加新功能”，而是让现有 retrieval / answer 能被持续观测、比较、回归验证
 
 ### 里程碑 M8：多模态与增强型 Ingestion
 

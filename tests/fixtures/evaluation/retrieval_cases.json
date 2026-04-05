@@ -1,0 +1,13 @@
+{
+  "cases": [
+    {
+      "name": "semantic-python-doc",
+      "query": "semantic embeddings",
+      "collection": "knowledge",
+      "top_k": 2,
+      "mode": "dense",
+      "expected_doc_ids": [],
+      "expected_chunk_ids": []
+    }
+  ]
+}

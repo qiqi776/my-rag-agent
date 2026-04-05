@@ -1,0 +1,18 @@
+{
+  "cases": [
+    {
+      "name": "semantic-answer",
+      "query": "semantic embeddings",
+      "collection": "knowledge",
+      "top_k": 1,
+      "mode": "hybrid",
+      "expected_keywords": [
+        "semantic",
+        "embeddings"
+      ],
+      "expected_source_paths": [
+        "python.txt"
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Minimal Modular RAG Project
 
-当前仓库处于 M6：在 M5 MCP 接口层的基础上，已经新增 rerank、fake LLM、answer builder 和 answer service，把项目从“检索型 RAG”推进到“带生成的本地 RAG”。
+当前仓库处于 M7：在 M6 生成链路的基础上，已经补上 trace reader、trace CLI、retrieval regression 和 answer regression，把项目从“能运行的本地 RAG”推进到“可观测、可回归的本地 RAG”。
 
 - 中文规格文档：`specs/minimal-modular-rag-project.md`
 - Python 工程配置：`pyproject.toml`
@@ -16,8 +16,9 @@
 - `query -> dense retrieve -> SearchOutput` 的查询链路
 - `query -> dense retrieve -> sparse retrieve -> RRF fuse -> SearchOutput` 的 hybrid 查询链路
 - 基于 JSONL 的 ingestion / query traces
+- trace exploration：`TraceReader`、`mrag-traces`
 - 文档生命周期操作：`list` / `delete`
-- CLI 入口：`mrag-ingest`、`mrag-query`、`mrag-docs`、`mrag-answer`
+- CLI 入口：`mrag-ingest`、`mrag-query`、`mrag-docs`、`mrag-answer`、`mrag-traces`、`mrag-eval`
 - MCP 入口：`mrag-mcp`
 - adapter base contracts：`BaseLoader`、`BaseEmbedding`、`BaseVectorStore`
 - factory 装配：CLI 通过配置选择具体 provider
@@ -25,6 +26,7 @@
 - fusion 组件：`rrf_fuse`
 - response 组件：`ResponseBuilder`、`SearchOutput`、`Citation`
 - answer 组件：`AnswerBuilder`、`AnswerOutput`、`AnswerService`
+- evaluation 组件：`RetrievalEvalRunner`、`AnswerEvalRunner`
 - MCP 组件：本地可测的 tool server、共享 mapper、共享依赖装配层
 
 当前内置 provider：
@@ -52,7 +54,7 @@
 - HTTP 接口
 - 真实外部 LLM / reranker provider
 - 多模态处理
-- Dashboard / Evaluation
+- 重量级 Dashboard / 在线 Evaluation 平台
 
 ## 目录结构
 
@@ -90,6 +92,8 @@ uv run mrag-query "semantic embeddings" --collection knowledge --mode hybrid
 uv run mrag-docs list --collection knowledge
 uv run mrag-docs delete <doc_id> --collection knowledge
 uv run mrag-answer "semantic embeddings" --collection knowledge
+uv run mrag-traces stats
+uv run mrag-eval all --retrieval-fixtures ./tests/fixtures/evaluation/retrieval_cases.json --answer-fixtures ./tests/fixtures/evaluation/answer_cases.json
 uv run mrag-mcp list-tools
 uv run mrag-mcp call-tool query_knowledge --arguments-json '{"query":"semantic embeddings","collection":"knowledge"}'
 ```
@@ -129,6 +133,29 @@ query -> SearchService -> SearchOutput -> Reranker -> FakeLLM -> AnswerOutput
 - `AnswerOutput` 是 answer-level contract
 - 不把生成逻辑塞回 `SearchService`
 - 当前 LLM 和 reranker 都是本地 fake 实现，用于打通链路和稳定测试
+
+## Observability And Evaluation
+
+当前 M7 新增了两类能力：
+
+- `TraceReader`
+  - 读取 JSONL traces
+  - 按 `ingestion / query / answer` 过滤
+  - 汇总阶段次数与耗时
+- regression runner
+  - `RetrievalEvalRunner`
+  - `AnswerEvalRunner`
+
+对应命令：
+
+```bash
+uv run mrag-traces list --limit 10
+uv run mrag-traces stats --trace-type answer
+uv run mrag-eval retrieval --fixtures ./tests/fixtures/evaluation/retrieval_cases.json
+uv run mrag-eval answer --fixtures ./tests/fixtures/evaluation/answer_cases.json
+```
+
+这些能力建立在已有的 `SearchOutput`、`AnswerOutput` 和 JSONL trace contract 之上，不需要把评估逻辑塞回 `SearchService` 或 `AnswerService`。
 
 ## 测试
 
