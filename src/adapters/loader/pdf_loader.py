@@ -3,19 +3,29 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
+import importlib.util
 import re
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from src.adapters.loader.base_loader import BaseLoader
 from src.core.errors import UnsupportedFileTypeError
 from src.core.types import Document, Metadata
 
-try:  # pragma: no cover - optional enhancement path
-    from pypdf import PdfReader
-except ImportError:  # pragma: no cover - exercised through fallback parser
-    PdfReader = None
+
+def _load_pdf_reader() -> type[Any] | None:
+    if importlib.util.find_spec("pypdf") is None:  # pragma: no cover - environment-dependent
+        return None
+
+    module = importlib.import_module("pypdf")  # pragma: no cover - environment-dependent
+    reader = getattr(module, "PdfReader", None)
+    return reader if isinstance(reader, type) else None
+
+
+PdfReader = _load_pdf_reader()
 
 _OBJECT_PATTERN = re.compile(rb"(?P<object_id>\d+)\s+\d+\s+obj(?P<body>.*?)endobj", re.S)
 _STREAM_PATTERN = re.compile(rb"stream\r?\n(?P<stream>.*?)\r?\nendstream", re.S)
