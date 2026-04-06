@@ -62,6 +62,20 @@ def _require_list(data: dict[str, Any], key: str, parent: str) -> list[str]:
     return value
 
 
+def _optional_mapping(data: dict[str, Any], key: str, parent: str) -> dict[str, Any]:
+    value = data.get(key, {})
+    if not isinstance(value, dict):
+        raise ConfigError(f"Missing or invalid mapping: {parent}.{key}")
+    return value
+
+
+def _optional_bool(data: dict[str, Any], key: str, parent: str, default: bool) -> bool:
+    value = data.get(key, default)
+    if not isinstance(value, bool):
+        raise ConfigError(f"Missing or invalid boolean: {parent}.{key}")
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class ProjectSettings:
     name: str
@@ -74,6 +88,48 @@ class IngestionSettings:
     chunk_size: int
     chunk_overlap: int
     supported_extensions: list[str] = field(default_factory=list)
+    transforms: IngestionTransformsSettings = field(default_factory=lambda: IngestionTransformsSettings())
+
+
+DEFAULT_TRANSFORM_ORDER = [
+    "metadata_enrichment",
+    "chunk_refinement",
+    "image_captioning",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class MetadataEnrichmentSettings:
+    enabled: bool = True
+    section_title_max_length: int = 120
+
+
+@dataclass(frozen=True, slots=True)
+class ChunkRefinementSettings:
+    enabled: bool = True
+    collapse_whitespace: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class ImageCaptioningSettings:
+    enabled: bool = False
+    stub_caption: str = "image captioning not configured"
+    append_to_text: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class IngestionTransformsSettings:
+    enabled: bool = False
+    order: list[str] = field(default_factory=lambda: DEFAULT_TRANSFORM_ORDER.copy())
+    metadata_enrichment: MetadataEnrichmentSettings = field(
+        default_factory=lambda: MetadataEnrichmentSettings()
+    )
+    chunk_refinement: ChunkRefinementSettings = field(
+        default_factory=lambda: ChunkRefinementSettings()
+    )
+    image_captioning: ImageCaptioningSettings = field(
+        default_factory=lambda: ImageCaptioningSettings()
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,6 +219,49 @@ class Settings:
         if chunk_overlap < 0 or chunk_overlap >= chunk_size:
             raise ConfigError("ingestion.chunk_overlap must be >= 0 and < chunk_size")
 
+        transforms = _optional_mapping(ingestion, "transforms", "ingestion")
+        transform_order_raw = transforms.get("order", DEFAULT_TRANSFORM_ORDER)
+        if not isinstance(transform_order_raw, list) or not all(
+            isinstance(item, str) and item.strip() for item in transform_order_raw
+        ):
+            raise ConfigError("ingestion.transforms.order must be a list of transform names")
+        transform_order = [item.strip().lower() for item in transform_order_raw]
+        supported_transforms = set(DEFAULT_TRANSFORM_ORDER)
+        unknown_transforms = sorted(set(transform_order) - supported_transforms)
+        if unknown_transforms:
+            raise ConfigError(
+                "ingestion.transforms.order contains unsupported transforms: "
+                + ", ".join(unknown_transforms)
+            )
+
+        metadata_enrichment = _optional_mapping(
+            transforms,
+            "metadata_enrichment",
+            "ingestion.transforms",
+        )
+        metadata_title_max_length = metadata_enrichment.get("section_title_max_length", 120)
+        if not isinstance(metadata_title_max_length, int) or metadata_title_max_length <= 0:
+            raise ConfigError(
+                "ingestion.transforms.metadata_enrichment.section_title_max_length must be > 0"
+            )
+
+        chunk_refinement = _optional_mapping(
+            transforms,
+            "chunk_refinement",
+            "ingestion.transforms",
+        )
+        image_captioning = _optional_mapping(
+            transforms,
+            "image_captioning",
+            "ingestion.transforms",
+        )
+        image_caption_stub = image_captioning.get(
+            "stub_caption",
+            "image captioning not configured",
+        )
+        if not isinstance(image_caption_stub, str) or not image_caption_stub.strip():
+            raise ConfigError("ingestion.transforms.image_captioning.stub_caption must be a string")
+
         dense_top_k = _require_int(retrieval, "dense_top_k", "retrieval")
         if dense_top_k <= 0:
             raise ConfigError("retrieval.dense_top_k must be > 0")
@@ -217,6 +316,48 @@ class Settings:
                     ingestion,
                     "supported_extensions",
                     "ingestion",
+                ),
+                transforms=IngestionTransformsSettings(
+                    enabled=_optional_bool(transforms, "enabled", "ingestion.transforms", False),
+                    order=transform_order,
+                    metadata_enrichment=MetadataEnrichmentSettings(
+                        enabled=_optional_bool(
+                            metadata_enrichment,
+                            "enabled",
+                            "ingestion.transforms.metadata_enrichment",
+                            True,
+                        ),
+                        section_title_max_length=metadata_title_max_length,
+                    ),
+                    chunk_refinement=ChunkRefinementSettings(
+                        enabled=_optional_bool(
+                            chunk_refinement,
+                            "enabled",
+                            "ingestion.transforms.chunk_refinement",
+                            True,
+                        ),
+                        collapse_whitespace=_optional_bool(
+                            chunk_refinement,
+                            "collapse_whitespace",
+                            "ingestion.transforms.chunk_refinement",
+                            True,
+                        ),
+                    ),
+                    image_captioning=ImageCaptioningSettings(
+                        enabled=_optional_bool(
+                            image_captioning,
+                            "enabled",
+                            "ingestion.transforms.image_captioning",
+                            False,
+                        ),
+                        stub_caption=image_caption_stub.strip(),
+                        append_to_text=_optional_bool(
+                            image_captioning,
+                            "append_to_text",
+                            "ingestion.transforms.image_captioning",
+                            False,
+                        ),
+                    ),
                 ),
             ),
             retrieval=RetrievalSettings(

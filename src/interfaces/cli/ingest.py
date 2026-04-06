@@ -15,7 +15,7 @@ from src.observability.trace_store import TraceStore
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Ingest local text documents into the MVP store.")
+    parser = argparse.ArgumentParser(description="Ingest local documents into the MVP store.")
     parser.add_argument("path", help="File or directory to ingest.")
     parser.add_argument("--collection", default=None, help="Target collection name.")
     parser.add_argument(

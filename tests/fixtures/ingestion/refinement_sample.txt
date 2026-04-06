@@ -1,0 +1,5 @@
+  Minimal   Modular   RAG  
+
+Page 1
+
+Transform   cleanup    should   normalize   spacing.

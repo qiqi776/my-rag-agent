@@ -18,6 +18,7 @@ class AnswerCitation:
     collection: str
     chunk_index: int | None
     score: float
+    page: int | None = None
 
     def to_dict(self) -> Metadata:
         return asdict(self)
@@ -64,6 +65,7 @@ class AnswerBuilder:
                 collection=result.collection,
                 chunk_index=result.chunk_index,
                 score=result.score,
+                page=result.page,
             )
             for result in supporting_results
         ]

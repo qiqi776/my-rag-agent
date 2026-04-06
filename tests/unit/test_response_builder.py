@@ -22,6 +22,7 @@ def _result(
     source_path: str = "/tmp/python.txt",
     collection: str = "knowledge",
     chunk_index: int = 0,
+    page: int | None = None,
     metadata: dict[str, object] | None = None,
 ) -> RetrievalResult:
     payload = {
@@ -29,6 +30,8 @@ def _result(
         "collection": collection,
         "chunk_index": chunk_index,
     }
+    if page is not None:
+        payload["page"] = page
     if metadata:
         payload.update(metadata)
     return RetrievalResult(
@@ -122,3 +125,17 @@ def test_response_builder_returns_stable_empty_output() -> None:
     assert output.results == []
     assert output.citations == []
     assert output.to_dict()["results"] == []
+
+
+@pytest.mark.unit
+def test_response_builder_propagates_page_metadata_into_results_and_citations() -> None:
+    builder = ResponseBuilder()
+
+    output = builder.build(
+        _query(),
+        [_result("chunk-a", 0.91, chunk_index=3, page=2)],
+        retrieval_mode="dense",
+    )
+
+    assert output.results[0].page == 2
+    assert output.citations[0].page == 2

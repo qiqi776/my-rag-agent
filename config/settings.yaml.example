@@ -11,6 +11,25 @@ ingestion:
   supported_extensions:
     - ".txt"
     - ".md"
+    # For PDF ingestion, switch `adapters.loader.provider` to "pdf"
+    # and replace the extensions above with:
+    # - ".pdf"
+  transforms:
+    enabled: false
+    order:
+      - "metadata_enrichment"
+      - "chunk_refinement"
+      - "image_captioning"
+    metadata_enrichment:
+      enabled: true
+      section_title_max_length: 120
+    chunk_refinement:
+      enabled: true
+      collapse_whitespace: true
+    image_captioning:
+      enabled: false
+      stub_caption: "image captioning not configured"
+      append_to_text: false
 
 retrieval:
   mode: "dense"

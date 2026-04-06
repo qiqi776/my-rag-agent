@@ -13,7 +13,9 @@ from src.adapters.loader.base_loader import BaseLoader
 from src.adapters.vector_store.base_vector_store import BaseVectorStore
 from src.core.settings import Settings
 from src.core.trace import TraceContext
-from src.core.types import Chunk, ChunkRecord, Document
+from src.core.types import Chunk, ChunkRecord
+from src.ingestion.models import IngestionUnit
+from src.ingestion.pipeline import IngestionPipeline, create_ingestion_pipeline
 from src.observability.logger import get_logger
 from src.observability.trace_store import TraceStore
 
@@ -38,12 +40,14 @@ class IngestService:
         embedding: BaseEmbedding,
         vector_store: BaseVectorStore,
         trace_store: TraceStore | None = None,
+        pipeline: IngestionPipeline | None = None,
     ) -> None:
         self.settings = settings
         self.loader = loader
         self.embedding = embedding
         self.vector_store = vector_store
         self.trace_store = trace_store
+        self.pipeline = pipeline or create_ingestion_pipeline(settings)
         self.logger = get_logger("minimal-rag.ingest", settings.observability.log_level)
 
     def ingest_path(self, path: str | Path, collection: str | None = None) -> list[IngestedDocument]:
@@ -78,15 +82,31 @@ class IngestService:
         document = self.loader.load(file_path)
         trace.record_stage(
             "load",
-            {"doc_id": document.id, "source_path": document.metadata["source_path"]},
+            {
+                "doc_id": document.id,
+                "source_path": document.metadata["source_path"],
+                "page_count": document.metadata.get("page_count", 1),
+            },
             elapsed_ms=(time.monotonic() - load_started) * 1000.0,
         )
 
+        transform_started = time.monotonic()
+        prepared = self.pipeline.prepare(document, collection)
+        trace.record_stage(
+            "transform",
+            prepared.to_trace_payload(),
+            elapsed_ms=(time.monotonic() - transform_started) * 1000.0,
+        )
+
         split_started = time.monotonic()
-        chunks = list(self._split_document(document, collection))
+        chunks = list(self._split_units(prepared.units, collection))
         trace.record_stage(
             "split",
-            {"chunk_count": len(chunks), "chunk_size": self.settings.ingestion.chunk_size},
+            {
+                "chunk_count": len(chunks),
+                "chunk_size": self.settings.ingestion.chunk_size,
+                "source_unit_count": prepared.output_unit_count,
+            },
             elapsed_ms=(time.monotonic() - split_started) * 1000.0,
         )
 
@@ -127,37 +147,38 @@ class IngestService:
             chunk_count=len(records),
         )
 
-    def _split_document(self, document: Document, collection: str) -> Iterable[Chunk]:
-        text = document.text
+    def _split_units(self, units: Iterable[IngestionUnit], collection: str) -> Iterable[Chunk]:
         chunk_size = self.settings.ingestion.chunk_size
         chunk_overlap = self.settings.ingestion.chunk_overlap
         step = chunk_size - chunk_overlap
         chunk_index = 0
 
-        if not text.strip():
-            return []
-
-        for start in range(0, len(text), step):
-            chunk_text = text[start : start + chunk_size]
-            if not chunk_text.strip():
+        for unit in units:
+            text = unit.text
+            if not text.strip():
                 continue
-            end = min(start + chunk_size, len(text))
-            content_hash = hashlib.sha256(chunk_text.encode("utf-8")).hexdigest()[:12]
-            chunk_id = f"{document.id}_{chunk_index:04d}_{content_hash}"
-            metadata = {
-                **document.metadata,
-                "collection": collection,
-                "doc_id": document.id,
-                "chunk_index": chunk_index,
-                "start_offset": start,
-                "end_offset": end,
-            }
-            yield Chunk(
-                id=chunk_id,
-                doc_id=document.id,
-                text=chunk_text,
-                metadata=metadata,
-            )
-            chunk_index += 1
-            if end >= len(text):
-                break
+
+            for start in range(0, len(text), step):
+                chunk_text = text[start : start + chunk_size]
+                if not chunk_text.strip():
+                    continue
+                end = min(start + chunk_size, len(text))
+                content_hash = hashlib.sha256(chunk_text.encode("utf-8")).hexdigest()[:12]
+                chunk_id = f"{unit.doc_id}_{chunk_index:04d}_{content_hash}"
+                metadata = {
+                    **unit.metadata,
+                    "collection": collection,
+                    "doc_id": unit.doc_id,
+                    "chunk_index": chunk_index,
+                    "start_offset": start,
+                    "end_offset": end,
+                }
+                yield Chunk(
+                    id=chunk_id,
+                    doc_id=unit.doc_id,
+                    text=chunk_text,
+                    metadata=metadata,
+                )
+                chunk_index += 1
+                if end >= len(text):
+                    break

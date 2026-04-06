@@ -1,6 +1,6 @@
 # Minimal Modular RAG Project
 
-当前仓库处于 M7：在 M6 生成链路的基础上，已经补上 trace reader、trace CLI、retrieval regression 和 answer regression，把项目从“能运行的本地 RAG”推进到“可观测、可回归的本地 RAG”。
+当前仓库处于 M8：在 M7 的可观测与回归能力之上，已经补上 PDF loader、可插拔 transform pipeline 和页级 metadata，把项目推进到“可扩展的增强型 ingestion”阶段。
 
 - 中文规格文档：`specs/minimal-modular-rag-project.md`
 - Python 工程配置：`pyproject.toml`
@@ -13,6 +13,7 @@
 当前已经完成的能力：
 
 - `load -> split -> embed -> store` 的本地文本摄取链路
+- `load -> transform -> split -> embed -> store` 的增强型摄取链路
 - `query -> dense retrieve -> SearchOutput` 的查询链路
 - `query -> dense retrieve -> sparse retrieve -> RRF fuse -> SearchOutput` 的 hybrid 查询链路
 - 基于 JSONL 的 ingestion / query traces
@@ -28,10 +29,12 @@
 - answer 组件：`AnswerBuilder`、`AnswerOutput`、`AnswerService`
 - evaluation 组件：`RetrievalEvalRunner`、`AnswerEvalRunner`
 - MCP 组件：本地可测的 tool server、共享 mapper、共享依赖装配层
+- ingestion 组件：`IngestionPipeline`、页级 `IngestionUnit`、transform plugins
 
 当前内置 provider：
 
 - loader: `text`
+- loader: `pdf`
 - embedding: `fake`
 - llm: `fake`
 - reranker: `fake`
@@ -53,7 +56,7 @@
 
 - HTTP 接口
 - 真实外部 LLM / reranker provider
-- 多模态处理
+- 完整多模态检索 / OCR / 外部图像大模型链路
 - 重量级 Dashboard / 在线 Evaluation 平台
 
 ## 目录结构
@@ -76,6 +79,7 @@ uv sync --extra dev
 默认 retrieval mode 是 `dense`，也可以通过配置或 CLI 参数切换成 `hybrid`。
 查询服务现在输出稳定的 `SearchOutput` 结构，包含 `results` 和 `citations`，后续可直接复用于 CLI、MCP 或 HTTP 接口。
 答案服务会在 `SearchOutput` 之上继续执行 `rerank -> answer synthesis`，输出独立的 `AnswerOutput`。
+默认 loader provider 仍然是 `text`；切换到 `pdf` 后，ingestion pipeline 会在 chunking 之前先执行 page-aware transforms。
 
 当前 MCP 层复用的是同一套 application services：
 
@@ -136,12 +140,17 @@ query -> SearchService -> SearchOutput -> Reranker -> FakeLLM -> AnswerOutput
 
 ## Observability And Evaluation
 
-当前 M7 新增了两类能力：
+当前 M7/M8 组合后，项目具备三类支撑能力：
 
 - `TraceReader`
   - 读取 JSONL traces
   - 按 `ingestion / query / answer` 过滤
   - 汇总阶段次数与耗时
+- ingestion pipeline
+  - `PdfLoader` 提供 PDF 文本抽取与页级 metadata
+  - `MetadataEnrichmentTransform`
+  - `ChunkRefinementTransform`
+  - `ImageCaptioningTransform`（stub / fake，可关闭）
 - regression runner
   - `RetrievalEvalRunner`
   - `AnswerEvalRunner`
@@ -158,6 +167,24 @@ uv run mrag-eval answer --fixtures ./tests/fixtures/evaluation/answer_cases.json
 
 这些能力建立在已有的 `SearchOutput`、`AnswerOutput` 和 JSONL trace contract 之上，不需要把评估逻辑塞回 `SearchService` 或 `AnswerService`。默认 regression fixtures 假定你已经先 ingest 了 `tests/fixtures/evaluation/corpus/` 里的语料。
 
+## M8 Ingestion
+
+当前 M8 的 ingestion 重点是扩展边界，而不是一步做到完整多模态系统：
+
+- `PdfLoader`
+  - 输出统一 `Document`
+  - 在 metadata 中保留 `source_path`、`doc_type`、`page_count` 和 `pages`
+- `IngestionPipeline`
+  - 把 loader 输出扩成页级 `IngestionUnit`
+  - 在 `load` 和 `split` 之间执行 transforms
+  - 关闭 transforms 时退化为原有文本 ingest 行为
+- transforms
+  - `metadata_enrichment`：补 `section_title`
+  - `chunk_refinement`：规则清洗空白与页噪声
+  - `image_captioning`：当前是 stub / fake 扩展点，不依赖外部视觉模型
+
+当前页码 metadata 会进入 chunk record，并在 query / answer citations 中保留 `page` 字段，方便后续回溯来源。
+
 ## 测试
 
 ```bash
@@ -170,6 +197,7 @@ uv run ruff check .
 - 新增真实 embedding provider，并通过 `src/adapters/embedding/factory.py` 接入
 - 新增真实 vector store 后端，并实现 `BaseVectorStore`
 - 新增真实 LLM / reranker provider，并通过 factory 接入
+- 在当前 transform contract 上继续扩展 OCR、图像 captioning 和更复杂的 PDF 版面处理
 - 在不改 application 层的前提下接入 HTTP、真实 MCP SDK/stdio transport
 
 详细需求、边界和后续里程碑请参考：

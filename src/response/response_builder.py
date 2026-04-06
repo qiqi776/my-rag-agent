@@ -21,6 +21,11 @@ def _chunk_index_for(result: RetrievalResult) -> int | None:
     return value if isinstance(value, int) else None
 
 
+def _page_for(result: RetrievalResult) -> int | None:
+    value = result.metadata.get("page")
+    return value if isinstance(value, int) else None
+
+
 @dataclass(slots=True)
 class Citation:
     """Stable citation payload for downstream interfaces."""
@@ -31,6 +36,7 @@ class Citation:
     collection: str
     chunk_index: int | None
     score: float
+    page: int | None = None
 
     def to_dict(self) -> Metadata:
         return asdict(self)
@@ -48,6 +54,7 @@ class SearchResultItem:
     source_path: str
     collection: str
     chunk_index: int | None
+    page: int | None = None
     metadata: Metadata = field(default_factory=dict)
 
     def to_dict(self) -> Metadata:
@@ -94,6 +101,7 @@ class ResponseBuilder:
             source_path = _source_path_for(result)
             collection = _collection_for(result, query)
             chunk_index = _chunk_index_for(result)
+            page = _page_for(result)
 
             items.append(
                 SearchResultItem(
@@ -105,6 +113,7 @@ class ResponseBuilder:
                     source_path=source_path,
                     collection=collection,
                     chunk_index=chunk_index,
+                    page=page,
                     metadata=result.metadata.copy(),
                 )
             )
@@ -116,6 +125,7 @@ class ResponseBuilder:
                     collection=collection,
                     chunk_index=chunk_index,
                     score=result.score,
+                    page=page,
                 )
             )
 

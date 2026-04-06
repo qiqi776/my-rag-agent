@@ -1407,30 +1407,174 @@ ingestion trace 建议稳定记录：
 
 ### 里程碑 M8：多模态与增强型 Ingestion
 
-范围：
+目标
 
-- 增加 PDF loader
-- 增加 transform pipeline
-- 增加 metadata enrichment / image captioning / chunk refinement 的插件化入口
+- 在不破坏当前 retrieval、answer、document lifecycle 契约的前提下扩展 ingest 能力
+- 引入 PDF loader 与可插拔 transform pipeline
+- 让文档在进入 chunk / vector store 之前支持 metadata enrichment、页级拆分和轻量内容增强
+- 为后续多模态处理与更复杂 ingestion workflow 预留稳定扩展点
 
-主要交付物：
+具体任务
 
-- `src/adapters/loader/pdf_loader.py`
-- `src/ingestion/transforms/`
-- `src/ingestion/pipeline.py`
-- 图片或页码级 metadata 支持
-- 相关 unit / integration tests
+1. 明确 M8 范围：
+   - 重点做：
+   - PDF loader
+   - ingestion pipeline
+   - transform plugins
+   - 页码级 metadata
+   - 可选的 image captioning / chunk refinement 扩展点
+   - 本轮不做：
+   - 完整 OCR 平台
+   - 真正的多模态检索
+   - 外部图像大模型依赖
+   - dashboard / evaluation 增强
+   - Agent loop
 
-验收意图：
+2. 新增 PDF loader：
+   - src/adapters/loader/pdf_loader.py
+   - 如有必要补充：
+   - src/adapters/loader/factory.py
+   - 第一版至少支持：
+   - 从 PDF 提取文本
+   - 返回统一 Document 或页级中间结构
+   - 为后续 metadata 保留：
+   - source_path
+   - page
+   - title（如可得）
+   - 不要求第一版就支持复杂版面分析
 
-- 多模态与增强步骤以插件形式接入现有 ingest pipeline
-- 不改动核心 `SearchService` 和 `DocumentService` 契约
-- citations 仍然能够定位来源
+3. 定义 ingestion pipeline：
+   - src/ingestion/pipeline.py
+   - pipeline 负责：
+   - 调用 loader
+   - 运行 transforms
+   - 生成最终可切分文本单元
+   - 与现有 IngestService 对接时，应避免把 transform 逻辑硬塞进 service 主体
+   - 推荐把 pipeline 作为 IngestService 的下游编排助手，而不是重新定义 ingest 主链
+
+4. 新增 transform 目录：
+   - src/ingestion/transforms/
+   - 至少定义：
+   - base transform contract
+   - metadata enrichment transform
+   - chunk refinement transform
+   - 如需占位，可增加：
+   - image captioning transform（stub / fake）
+   - 重点是先把插件接口拉直，而不是一开始就引入重量级实现
+
+5. 明确 transform contract：
+   - 每个 transform 至少应支持：
+   - 输入统一文档单元
+   - 输出统一文档单元
+   - 可附加 metadata
+   - 可跳过或 no-op
+   - contract 应保证 transform 可组合、可测试、可独立启停
+
+6. 页级与来源级 metadata 支持：
+   - 至少在 metadata 中保留：
+   - source_path
+   - collection
+   - doc_id
+   - page
+   - chunk_index
+   - 如 transform 增加内容增强，可附加：
+   - section_title
+   - caption
+   - refinement_applied
+   - 目标是让 citations 后续仍然能准确回溯
+
+7. 与现有 ingest 链路集成：
+   - src/application/ingest_service.py
+   - 现有 ingest 主链仍应保持：
+   - discover -> load -> split -> embed -> store
+   - M8 应把增强步骤插入到：
+   - load 与 split 之间
+   - 或在 loader 输出与 chunking 之间
+   - 不要改坏现有文本文件 ingest 行为
+
+8. 配置扩展：
+   - src/core/settings.py
+   - config/settings.yaml.example
+   - 至少增加：
+   - loader.provider = text / pdf
+   - ingestion.transforms.enabled
+   - ingestion.transforms.order
+   - 对每个 transform 的开关或基础参数
+   - 配置必须支持：
+   - 关闭所有 transform 时，仍然退化为当前 M7 的纯文本 ingest 行为
+
+9. 新增测试夹具与样例文档：
+   - tests/fixtures/ingestion/
+   - 至少包含：
+   - 一个 PDF 样例
+   - 一个多页 PDF 样例
+   - 一个 transform 前后可对比的文本样例
+   - 样例应尽量小、稳定、适合本地仓库长期保留
+
+10. 测试：
+
+- tests/unit/test_pdf_loader.py
+- tests/unit/test_ingestion_pipeline.py
+- tests/unit/test_transforms.py
+- tests/integration/test_pdf_ingestion.py
+- tests/integration/test_transform_pipeline.py
+- 至少覆盖：
+- PDF 可成功读取
+- transform 顺序可控
+- transform 可 no-op
+- metadata 在 pipeline 中不丢失
+- 页码级 citations 可回溯
+- 纯文本 ingest 行为未回归
+
+11. 文档：
+
+- 更新 README
+- 说明项目进入 M8：多模态与增强型 Ingestion
+- 说明当前支持：
+- PDF loader
+- transform pipeline
+- metadata enrichment
+- 说明当前边界：
+- 仍不是完整多模态检索系统
+- image captioning 可以先是 stub / fake
+
+12. M8 验收标准：
+
+- 支持 PDF ingest
+- 支持至少一个可配置 transform pipeline
+- 支持页级或来源级 metadata 回溯
+- 不改坏现有 txt / md ingest
+- SearchService / DocumentService / AnswerService 的契约不需要被推翻
+- citations 仍可定位来源
+- ruff 通过
+- pytest 通过
+
+约束
+
+- 不要一开始就引入复杂 OCR、版面分析或外部多模态大模型依赖
+- 不要把 transform 逻辑塞进 SearchService、AnswerService 或接口层
+- 不要在这一阶段扩展多模态检索，而应专注于 ingestion 扩展点
+- transform pipeline 必须在关闭时能退化为当前纯文本 ingest 行为
+- 如果执行中断了，就重新审视当前仓库状态后继续完成，不要停在半成品分析
+
+完成前必须执行完整验证
+
+- ./.venv/bin/ruff check .
+- ./.venv/bin/pytest
+
+输出要求
+
+- 直接改代码，不要只给方案
+- 最终说明包括：
+  - 做了什么
+  - PDF loader / transform pipeline 如何接入现有 ingest 契约
+  - 当前 residual risks
+  - 验证结果
 
 说明：
 
 - 这一阶段借鉴参考项目的 transform 思路，但不要求一开始就引入完整图像处理链路
-- 先定义 transform 扩展点，再逐步接入具体能力
+- M8 的重点是先定义 loader 与 transform 的扩展边界，再逐步把更多多模态处理能力接进去
 
 ### 里程碑 M9：Agent-Ready 扩展层
 

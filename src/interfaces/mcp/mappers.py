@@ -43,9 +43,10 @@ def map_search_output(output: SearchOutput) -> MCPToolResult:
         "",
     ]
     for item in output.results:
+        page_suffix = f", page={item.page}" if item.page is not None else ""
         lines.append(
             f"{item.rank}. `{item.source_path}` "
-            f"(score={item.score:.4f}, chunk_id={item.chunk_id})"
+            f"(score={item.score:.4f}, chunk_id={item.chunk_id}{page_suffix})"
         )
         lines.append(f"   {_snippet(item.text)}")
         lines.append("")
@@ -54,9 +55,10 @@ def map_search_output(output: SearchOutput) -> MCPToolResult:
         lines.append("### Citations")
         lines.append("")
         for index, citation in enumerate(output.citations, start=1):
+            page_suffix = f", page={citation.page}" if citation.page is not None else ""
             lines.append(
                 f"[{index}] `{citation.source_path}` "
-                f"(doc_id={citation.doc_id}, chunk_index={citation.chunk_index})"
+                f"(doc_id={citation.doc_id}, chunk_index={citation.chunk_index}{page_suffix})"
             )
 
     payload = output.to_dict()

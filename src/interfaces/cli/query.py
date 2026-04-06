@@ -77,9 +77,10 @@ def main() -> int:
     )
     for result in response.results:
         snippet = result.text.replace("\n", " ")[:120]
+        page_suffix = f" page={result.page}" if result.page is not None else ""
         print(
             f"{result.rank:02d}. score={result.score:.4f} chunk_id={result.chunk_id} "
-            f"source={result.source_path}"
+            f"source={result.source_path}{page_suffix}"
         )
         print(f"    {snippet}")
     return 0

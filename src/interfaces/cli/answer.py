@@ -81,9 +81,10 @@ def main() -> int:
         print("")
         print("Citations:")
         for index, citation in enumerate(output.citations, start=1):
+            page_suffix = f" page={citation.page}" if citation.page is not None else ""
             print(
                 f"{index:02d}. chunk_id={citation.chunk_id} "
-                f"source={citation.source_path} score={citation.score:.4f}"
+                f"source={citation.source_path}{page_suffix} score={citation.score:.4f}"
             )
     return 0
 

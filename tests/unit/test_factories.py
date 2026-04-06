@@ -10,6 +10,7 @@ from src.adapters.llm.base_llm import BaseLLM
 from src.adapters.llm.factory import create_llm
 from src.adapters.loader.base_loader import BaseLoader
 from src.adapters.loader.factory import create_loader
+from src.adapters.loader.pdf_loader import PdfLoader
 from src.adapters.reranker.base_reranker import BaseReranker
 from src.adapters.reranker.factory import create_reranker
 from src.adapters.vector_store.base_vector_store import BaseVectorStore
@@ -28,7 +29,9 @@ def _write_settings(
     embedding_provider: str = "fake",
     llm_provider: str = "fake",
     reranker_provider: str = "fake",
+    supported_extensions: tuple[str, ...] = (".txt", ".md"),
 ) -> None:
+    extensions_block = "\n".join(f'    - "{extension}"' for extension in supported_extensions)
     path.write_text(
         f"""
 project:
@@ -39,8 +42,7 @@ ingestion:
   chunk_size: 80
   chunk_overlap: 10
   supported_extensions:
-    - ".txt"
-    - ".md"
+{extensions_block}
 retrieval:
   dense_top_k: 3
 adapters:
@@ -94,6 +96,22 @@ def test_vector_store_factory_supports_memory_provider(tmp_path: Path) -> None:
     vector_store = create_vector_store(settings)
 
     assert isinstance(vector_store, InMemoryVectorStore)
+
+
+@pytest.mark.unit
+def test_loader_factory_supports_pdf_provider(tmp_path: Path) -> None:
+    config_path = tmp_path / "settings.yaml"
+    _write_settings(
+        config_path,
+        tmp_path / "store.json",
+        loader_provider="pdf",
+        supported_extensions=(".pdf",),
+    )
+    settings = load_settings(config_path)
+
+    loader = create_loader(settings)
+
+    assert isinstance(loader, PdfLoader)
 
 
 @pytest.mark.unit
