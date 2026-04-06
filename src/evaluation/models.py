@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import Any, Protocol
+
+from src.response.answer_builder import AnswerOutput
+from src.response.response_builder import SearchOutput
 
 
 @dataclass(slots=True)
@@ -112,3 +115,27 @@ class AnswerEvalReport:
             "average_citation_count": self.average_citation_count,
             "cases": [case.to_dict() for case in self.cases],
         }
+
+
+class SearchServiceLike(Protocol):
+    """Minimal search-service contract required by retrieval evaluation."""
+
+    def search(
+        self,
+        query: str,
+        collection: str | None = None,
+        top_k: int | None = None,
+        mode: str | None = None,
+    ) -> SearchOutput: ...
+
+
+class AnswerServiceLike(Protocol):
+    """Minimal answer-service contract required by answer evaluation."""
+
+    def answer(
+        self,
+        query: str,
+        collection: str | None = None,
+        top_k: int | None = None,
+        mode: str | None = None,
+    ) -> AnswerOutput: ...

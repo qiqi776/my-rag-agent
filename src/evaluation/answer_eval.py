@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from src.evaluation.models import AnswerEvalCase, AnswerEvalCaseResult, AnswerEvalReport
+from src.evaluation.models import (
+    AnswerEvalCase,
+    AnswerEvalCaseResult,
+    AnswerEvalReport,
+    AnswerServiceLike,
+)
 
 
 class AnswerEvalRunner:
     """Run answer regression cases against AnswerService."""
 
-    def __init__(self, answer_service: object) -> None:
+    def __init__(self, answer_service: AnswerServiceLike) -> None:
         self.answer_service = answer_service
 
     def run(self, cases: list[AnswerEvalCase]) -> AnswerEvalReport:

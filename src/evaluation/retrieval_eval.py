@@ -6,13 +6,14 @@ from src.evaluation.models import (
     RetrievalEvalCase,
     RetrievalEvalCaseResult,
     RetrievalEvalReport,
+    SearchServiceLike,
 )
 
 
 class RetrievalEvalRunner:
     """Run retrieval regression cases against SearchService."""
 
-    def __init__(self, search_service: object) -> None:
+    def __init__(self, search_service: SearchServiceLike) -> None:
         self.search_service = search_service
 
     def run(self, cases: list[RetrievalEvalCase]) -> RetrievalEvalReport:
