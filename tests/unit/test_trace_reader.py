@@ -31,7 +31,13 @@ def _write_trace_file(path: Path) -> None:
             "total_elapsed_ms": 10.0,
             "metadata": {"query": "semantic embeddings"},
             "stages": [
-                {"stage": "dense_retrieve", "data": {"result_count": 2}},
+                {
+                    "stage": "dense_retrieve",
+                    "data": {
+                        "candidate_result_count": 5,
+                        "final_result_count": 2,
+                    },
+                },
             ],
         },
         {
@@ -82,5 +88,14 @@ def test_trace_reader_gets_single_trace_and_summarizes(tmp_path: Path) -> None:
     assert summary.total_traces == 3
     assert summary.trace_counts == {"answer": 1, "ingestion": 1, "query": 1}
     assert summary.stage_counts["generate_answer"] == 1
+    assert summary.average_query_result_count == 2.0
     assert summary.average_answer_chars == 120.0
     assert summary.average_ingested_chunks == 3.0
+
+
+@pytest.mark.unit
+def test_trace_reader_raises_for_missing_trace_file(tmp_path: Path) -> None:
+    reader = TraceReader(tmp_path / "missing.jsonl")
+
+    with pytest.raises(FileNotFoundError, match="Trace file not found"):
+        reader.read_all()

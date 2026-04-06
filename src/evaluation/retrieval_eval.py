@@ -19,6 +19,11 @@ class RetrievalEvalRunner:
         results: list[RetrievalEvalCaseResult] = []
 
         for case in cases:
+            if not case.expected_doc_ids and not case.expected_chunk_ids:
+                raise ValueError(
+                    f"Retrieval eval case '{case.name}' must define expected_doc_ids or "
+                    "expected_chunk_ids"
+                )
             output = self.search_service.search(
                 case.query,
                 collection=case.collection,
@@ -32,8 +37,8 @@ class RetrievalEvalRunner:
 
             expected_total = len(case.expected_doc_ids) + len(case.expected_chunk_ids)
             matched_total = len(matched_doc_ids) + len(matched_chunk_ids)
-            hit_at_k = matched_total > 0 if expected_total else bool(output.results)
-            recall_at_k = matched_total / expected_total if expected_total else 1.0
+            hit_at_k = matched_total > 0
+            recall_at_k = matched_total / expected_total
 
             results.append(
                 RetrievalEvalCaseResult(

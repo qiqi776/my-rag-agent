@@ -149,13 +149,14 @@ query -> SearchService -> SearchOutput -> Reranker -> FakeLLM -> AnswerOutput
 对应命令：
 
 ```bash
+uv run mrag-ingest ./tests/fixtures/evaluation/corpus --collection knowledge
 uv run mrag-traces list --limit 10
 uv run mrag-traces stats --trace-type answer
 uv run mrag-eval retrieval --fixtures ./tests/fixtures/evaluation/retrieval_cases.json
 uv run mrag-eval answer --fixtures ./tests/fixtures/evaluation/answer_cases.json
 ```
 
-这些能力建立在已有的 `SearchOutput`、`AnswerOutput` 和 JSONL trace contract 之上，不需要把评估逻辑塞回 `SearchService` 或 `AnswerService`。
+这些能力建立在已有的 `SearchOutput`、`AnswerOutput` 和 JSONL trace contract 之上，不需要把评估逻辑塞回 `SearchService` 或 `AnswerService`。默认 regression fixtures 假定你已经先 ingest 了 `tests/fixtures/evaluation/corpus/` 里的语料。
 
 ## 测试
 

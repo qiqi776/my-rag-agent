@@ -87,16 +87,16 @@ class SearchService:
             query_vector=query_vector,
             top_k=dense_candidate_k,
         )
+        final_results = dense_results[: processed.top_k]
         trace.record_stage(
             "dense_retrieve",
             {
-                "result_count": len(dense_results),
+                "candidate_result_count": len(dense_results),
+                "final_result_count": len(final_results) if retrieval_mode == "dense" else None,
                 "candidate_top_k": dense_candidate_k,
             },
             elapsed_ms=(time.monotonic() - dense_started) * 1000.0,
         )
-
-        final_results = dense_results[: processed.top_k]
 
         if retrieval_mode == "hybrid":
             if self.sparse_retriever is None:
@@ -114,7 +114,7 @@ class SearchService:
             trace.record_stage(
                 "sparse_retrieve",
                 {
-                    "result_count": len(sparse_results),
+                    "candidate_result_count": len(sparse_results),
                     "candidate_top_k": sparse_candidate_k,
                 },
                 elapsed_ms=(time.monotonic() - sparse_started) * 1000.0,
@@ -133,7 +133,7 @@ class SearchService:
                 trace.record_stage(
                     "rrf_fuse",
                     {
-                        "result_count": len(final_results),
+                        "final_result_count": len(final_results),
                         "rrf_k": self.settings.retrieval.rrf_k,
                     },
                     elapsed_ms=(time.monotonic() - fuse_started) * 1000.0,
@@ -142,7 +142,7 @@ class SearchService:
                 trace.record_stage(
                     "rrf_fuse",
                     {
-                        "result_count": len(final_results),
+                        "final_result_count": len(final_results),
                         "rrf_k": self.settings.retrieval.rrf_k,
                         "skipped": True,
                     },

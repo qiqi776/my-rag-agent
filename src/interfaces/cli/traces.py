@@ -65,36 +65,35 @@ def main() -> int:
     try:
         trace_file = _resolve_trace_file(args.config, args.trace_file)
         reader = TraceReader(trace_file)
-    except ConfigError as exc:
-        print(json.dumps({"error": str(exc)}, ensure_ascii=False))
-        return 1
+        if args.command == "list":
+            payload = {
+                "traces": [
+                    trace.summary_dict()
+                    for trace in reader.list_traces(trace_type=args.trace_type, limit=args.limit)
+                ]
+            }
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            return 0
 
-    if args.command == "list":
-        payload = {
-            "traces": [
-                trace.summary_dict()
-                for trace in reader.list_traces(trace_type=args.trace_type, limit=args.limit)
-            ]
-        }
+        if args.command == "show":
+            trace = reader.get_trace(args.trace_id)
+            if trace is None:
+                print(
+                    json.dumps(
+                        {"error": f"Trace not found: {args.trace_id}"},
+                        ensure_ascii=False,
+                    )
+                )
+                return 1
+            print(json.dumps(trace.to_dict(), ensure_ascii=False, indent=2))
+            return 0
+
+        payload = reader.summarize(trace_type=args.trace_type).to_dict()
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
-
-    if args.command == "show":
-        trace = reader.get_trace(args.trace_id)
-        if trace is None:
-            print(
-                json.dumps(
-                    {"error": f"Trace not found: {args.trace_id}"},
-                    ensure_ascii=False,
-                )
-            )
-            return 1
-        print(json.dumps(trace.to_dict(), ensure_ascii=False, indent=2))
-        return 0
-
-    payload = reader.summarize(trace_type=args.trace_type).to_dict()
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 0
+    except (ConfigError, FileNotFoundError) as exc:
+        print(json.dumps({"error": str(exc)}, ensure_ascii=False))
+        return 1
 
 
 if __name__ == "__main__":

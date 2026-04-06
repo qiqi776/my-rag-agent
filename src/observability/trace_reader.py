@@ -23,6 +23,14 @@ def _query_result_count(trace: TraceRecord) -> int | None:
         stage = trace.stage(stage_name)
         if stage is None:
             continue
+        final_result_count = stage["data"].get("final_result_count")
+        if isinstance(final_result_count, int):
+            return final_result_count
+
+    for stage_name in ("rrf_fuse", "dense_retrieve"):
+        stage = trace.stage(stage_name)
+        if stage is None:
+            continue
         result_count = stage["data"].get("result_count")
         if isinstance(result_count, int):
             return result_count
@@ -128,7 +136,7 @@ class TraceReader:
 
     def read_all(self) -> list[TraceRecord]:
         if not self.path.exists():
-            return []
+            raise FileNotFoundError(f"Trace file not found: {self.path}")
 
         traces: list[TraceRecord] = []
         with self.path.open("r", encoding="utf-8") as handle:

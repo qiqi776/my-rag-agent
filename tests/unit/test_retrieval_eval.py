@@ -95,3 +95,17 @@ def test_retrieval_eval_runner_reports_failure_when_expected_items_missing() -> 
     assert report.passed_cases == 0
     assert report.average_hit_at_k == 0.0
     assert report.average_recall_at_k == 0.0
+
+
+@pytest.mark.unit
+def test_retrieval_eval_runner_rejects_case_without_expectations() -> None:
+    with pytest.raises(ValueError, match="must define expected_doc_ids or expected_chunk_ids"):
+        RetrievalEvalRunner(StubSearchService()).run(
+            [
+                RetrievalEvalCase(
+                    name="invalid",
+                    query="semantic embeddings",
+                    collection="knowledge",
+                )
+            ]
+        )

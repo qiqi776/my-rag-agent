@@ -350,7 +350,7 @@ ingestion trace 建议稳定记录：
 - `embed`
 - `store`
 
-## 当前已实现基线（M5）
+## 当前已实现基线（M7）
 
 ### M1：仅 Dense 的本地 MVP
 
@@ -1067,9 +1067,9 @@ ingestion trace 建议稳定记录：
 - `mrag-mcp`
 - MCP unit / integration / e2e tests
 
-## 交付计划
+## 已完成里程碑与后续计划
 
-### 里程碑 M6：生成与精排层
+### M6：生成与精排层
 
 目标
 
@@ -1231,7 +1231,7 @@ ingestion trace 建议稳定记录：
 - M6 的目标是把当前“检索型 RAG 基础工程”推进到“真正带生成的 RAG”
 - 不应在这一阶段引入复杂 Agent loop
 
-### 里程碑 M7：Observability 与 Evaluation
+### M7：Observability 与 Evaluation
 
 目标
 
