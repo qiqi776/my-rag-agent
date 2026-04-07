@@ -1578,24 +1578,208 @@ ingestion trace 建议稳定记录：
 
 ### 里程碑 M9：Agent-Ready 扩展层
 
-范围：
+目标
 
-- 在 RAG 工程稳定后，提供可供 Agent 调用的上层能力
-- 明确“RAG 基础层”和“Agent orchestration 层”的边界
+- 在 M8 的稳定 ingest / retrieval / answer / MCP 基础上，补一层可供 Agent 复用的高层能力
+- 让项目具备“可被 Agent 安全调用”的工程边界，而不是直接把 Agent loop 塞进现有 service
+- 明确“RAG 基础层”和“Agent orchestration 层”的职责分离
+- 为后续接入更真实的 planner、memory、tool-calling runtime 预留稳定扩展点
 
-主要交付物：
+具体任务
 
-- `src/agent/` 或 `src/workflows/`
+1. 明确 M9 范围：
+   - 重点做：
+   - agent-ready tool abstraction
+   - tool registry
+   - workflow state model
+   - query / document / answer 组合工具
+   - 最小 workflow 示例
+   - 本轮不做：
+   - 复杂自主 Agent loop
+   - 多 Agent 协作
+   - 浏览器自动化
+   - 长时记忆平台
+   - 真实在线 planner / judge
+   - 复杂任务调度系统
+
+2. 新增 Agent-ready 目录：
+   - 推荐新增：
+   - `src/agent/`
+   - 或：
+   - `src/workflows/`
+   - 至少拆分：
+   - tool contract
+   - registry
+   - workflow state
+   - workflow runner / stubs
+   - example workflow
+   - 重点是先稳定边界，而不是一开始就做全功能 Agent framework
+
+3. 定义 tool contract：
+   - 至少定义：
+   - `ToolContext`
+   - `ToolRequest`
+   - `ToolResult`
+   - `AgentTool` 或类似抽象
+   - contract 至少应支持：
+   - 唯一 tool name
+   - 入参 schema 或稳定参数约束
+   - 文本结果与结构化结果
+   - 错误状态
+   - metadata / trace_id 透传
+   - 明确要求：
+   - tool contract 不应直接绑定某个外部 Agent SDK
+
+4. 实现 tool registry：
+   - 至少支持：
+   - 注册 tool
+   - 列出可用 tool
+   - 按 name 查找 tool
+   - 调用 tool
+   - registry 应支持：
+   - 本地 CLI / demo 复用
+   - MCP 或后续 Agent runtime 复用
+   - 不要把业务逻辑写进 registry
+
+5. 实现基础 Agent tools：
+   - 至少提供：
+   - `search_knowledge`
+   - `answer_question`
+   - `list_documents`
+   - `delete_document` 或 `get_document_summary`
+   - 如有必要可增加：
+   - `ingest_documents`
+   - 这些 tool 必须：
+   - 复用现有 `SearchService` / `AnswerService` / `DocumentService` / `IngestService`
+   - 不得复制 retrieval、rerank、answer 逻辑
+
+6. 定义 workflow state：
+   - 至少支持：
+   - `workflow_id`
+   - 用户输入
+   - 已调用 tools 记录
+   - 中间结果
+   - 最终输出
+   - 错误信息
+   - 第一版可先做：
+   - in-memory state
+   - dataclass / typed model
+   - 不要求一开始就做持久化 checkpoint
+
+7. 实现最小 workflow stubs：
+   - 至少实现一个顺序型 workflow，例如：
+   - `research_and_answer`
+   - 或：
+   - `question_to_answer`
+   - 典型流程可为：
+   - search
+   - 结果判断 / 选择
+   - answer
+   - 生成最终结构化输出
+   - 如需扩展，可增加：
+   - list documents -> choose collection -> answer
+   - 但本轮应保持 deterministic，避免引入高度不稳定的自主规划
+
+8. 明确 workflow output contract：
+   - 输出至少应包含：
+   - final answer 或 final result
+   - 使用过的 tools
+   - 每步输入摘要
+   - 每步输出摘要
+   - citations 或 supporting references
+   - metadata
+   - 目标是让 workflow 既能给人看，也能给程序继续消费
+
+9. 新增最小入口：
+   - 推荐新增：
+   - `src/interfaces/cli/agent.py`
+   - 或：
+   - `src/interfaces/cli/workflow.py`
+   - 在 `pyproject.toml` 注册例如：
+   - `mrag-agent`
+   - 或：
+   - `mrag-workflow`
+   - 至少支持：
+   - 列出可用 tools
+   - 运行一个最小 workflow
+   - 输出结构化 JSON 或稳定文本
+   - CLI 只负责装配和演示，不承载 Agent 业务逻辑
+
+10. 与现有接口层的关系：
+   - M9 应明确：
+   - MCP tools 仍是协议层入口
+   - Agent-ready tools 是应用侧编排入口
+   - 两者可以共享 service，但不应互相复制实现
+   - 若已有 MCP tool 能复用的 mapper / payload，应优先复用稳定 contract
+   - 不要让 Agent 层反向侵入 `SearchService`、`AnswerService`、`DocumentService`
+
+11. 测试：
+
+- `tests/unit/test_agent_registry.py`
+- `tests/unit/test_agent_tools.py`
+- `tests/unit/test_workflow_state.py`
+- `tests/unit/test_workflow_runner.py`
+- `tests/integration/test_agent_workflow.py`
+- `tests/e2e/test_agent_cli.py`
+- 至少覆盖：
+- registry 注册 / 调用 / 错误处理正确
+- tool 复用现有 service 且输出稳定
+- workflow state 正确记录步骤与结果
+- 最小 workflow 能跑通 search -> answer
+- Agent 层删除后不影响 RAG 核心 service 测试
+- CLI 能输出固定 summary
+
+12. 文档：
+
+- 更新 README
+- 说明项目进入 M9：Agent-Ready 扩展层
+- 说明当前支持：
 - tool registry
-- query / document / answer 组合工具
-- stateful workflow stubs
-- 端到端示例
+- agent-ready tools
+- workflow stubs
+- 最小 workflow CLI / demo
+- 说明当前边界：
+- 仍不是完整自主 Agent 平台
+- 仍不包含复杂规划、长时记忆或多 Agent runtime
 
-验收意图：
+13. M9 验收标准：
 
-- Agent 使用现有 RAG 服务，而不是重新实现检索流程
-- Agent 层可以被删除而不影响 RAG 核心能力
-- RAG 工程仍可独立运行、独立测试
+- Agent-ready tools 明确复用现有 RAG services
+- 存在稳定的 tool registry 与 workflow state contract
+- 至少一个 workflow stub 可以从 query 运行到 final output
+- 不改坏现有 ingest / query / answer / MCP 链路
+- Agent 层可以被移除而不影响 RAG 核心能力
+- CLI / demo 可运行
+- ruff 通过
+- pytest 通过
+
+约束
+
+- 不要在这一阶段引入复杂自主规划或无限循环 Agent
+- 不要把 Agent orchestration 逻辑塞进 SearchService、AnswerService、DocumentService
+- 不要让 tool registry 依赖某个特定外部 Agent SDK
+- 不要复制已有 MCP tools 或已有 application service 的业务实现
+- workflow 第一版应 deterministic、可测试、可回归
+- 如果执行中断了，就重新审视当前仓库状态后继续完成，不要停在半成品分析
+
+完成前必须执行完整验证
+
+- ./.venv/bin/ruff check .
+- ./.venv/bin/pytest
+
+输出要求
+
+- 直接改代码，不要只给方案
+- 最终说明包括：
+  - 做了什么
+  - tool registry / workflow 如何复用当前 RAG service contract
+  - 当前 residual risks
+  - 验证结果
+
+说明：
+
+- M9 的重点不是“做一个会自己思考的 Agent”，而是把当前工程整理成可被 Agent 安全调用的上层能力
+- Agent-ready 层应建立在 M1-M8 已稳定的类型、service、response、trace、evaluation 契约之上
 
 ## 构建顺序
 

@@ -1,6 +1,6 @@
 # Minimal Modular RAG Project
 
-当前仓库处于 M8：在 M7 的可观测与回归能力之上，已经补上 PDF loader、可插拔 transform pipeline 和页级 metadata，把项目推进到“可扩展的增强型 ingestion”阶段。
+当前仓库处于 M9：在 M8 的增强型 ingestion 基础上，已经补上 agent-ready tool registry、deterministic workflow state 和最小 workflow CLI，把项目推进到“可被 Agent 安全复用的 RAG 工程”阶段。
 
 - 中文规格文档：`specs/minimal-modular-rag-project.md`
 - Python 工程配置：`pyproject.toml`
@@ -16,10 +16,12 @@
 - `load -> transform -> split -> embed -> store` 的增强型摄取链路
 - `query -> dense retrieve -> SearchOutput` 的查询链路
 - `query -> dense retrieve -> sparse retrieve -> RRF fuse -> SearchOutput` 的 hybrid 查询链路
+- agent-ready tool registry 与 workflow runner
+- `research_and_answer` 最小 workflow
 - 基于 JSONL 的 ingestion / query traces
 - trace exploration：`TraceReader`、`mrag-traces`
 - 文档生命周期操作：`list` / `delete`
-- CLI 入口：`mrag-ingest`、`mrag-query`、`mrag-docs`、`mrag-answer`、`mrag-traces`、`mrag-eval`
+- CLI 入口：`mrag-ingest`、`mrag-query`、`mrag-docs`、`mrag-answer`、`mrag-traces`、`mrag-eval`、`mrag-agent`
 - MCP 入口：`mrag-mcp`
 - adapter base contracts：`BaseLoader`、`BaseEmbedding`、`BaseVectorStore`
 - factory 装配：CLI 通过配置选择具体 provider
@@ -30,6 +32,7 @@
 - evaluation 组件：`RetrievalEvalRunner`、`AnswerEvalRunner`
 - MCP 组件：本地可测的 tool server、共享 mapper、共享依赖装配层
 - ingestion 组件：`IngestionPipeline`、页级 `IngestionUnit`、transform plugins
+- agent 组件：`ToolRegistry`、`WorkflowState`、`WorkflowRunner`、agent-ready tools
 
 当前内置 provider：
 
@@ -57,6 +60,7 @@
 - HTTP 接口
 - 真实外部 LLM / reranker provider
 - 完整多模态检索 / OCR / 外部图像大模型链路
+- 复杂自主 Agent loop / planner / 长时记忆
 - 重量级 Dashboard / 在线 Evaluation 平台
 
 ## 目录结构
@@ -87,6 +91,13 @@ uv sync --extra dev
 - `DocumentService`
 - `SearchOutput`
 
+当前 M9 的 Agent-ready 层同样复用 application services：
+
+- `SearchService`
+- `AnswerService`
+- `DocumentService`
+- `IngestService`
+
 示例命令：
 
 ```bash
@@ -100,6 +111,9 @@ uv run mrag-traces stats
 uv run mrag-eval all --retrieval-fixtures ./tests/fixtures/evaluation/retrieval_cases.json --answer-fixtures ./tests/fixtures/evaluation/answer_cases.json
 uv run mrag-mcp list-tools
 uv run mrag-mcp call-tool query_knowledge --arguments-json '{"query":"semantic embeddings","collection":"knowledge"}'
+uv run mrag-agent list-tools
+uv run mrag-agent list-workflows
+uv run mrag-agent run-workflow research_and_answer "semantic embeddings" --collection knowledge --mode hybrid
 ```
 
 ## MCP 接口
@@ -185,6 +199,33 @@ uv run mrag-eval answer --fixtures ./tests/fixtures/evaluation/answer_cases.json
 
 当前页码 metadata 会进入 chunk record，并在 query / answer citations 中保留 `page` 字段，方便后续回溯来源。
 
+## M9 Agent-Ready Layer
+
+当前 M9 的重点不是做复杂自主 Agent，而是把现有 RAG 工程整理成稳定可复用的上层能力：
+
+- `ToolRegistry`
+  - 注册、列出、查找和调用 agent-ready tools
+  - 错误统一映射为稳定 `ToolResult`
+- agent-ready tools
+  - `search_knowledge`
+  - `answer_question`
+  - `list_documents`
+  - `delete_document`
+  - 这些 tool 全部复用现有 application services，不复制业务逻辑
+- `WorkflowState`
+  - 记录 `workflow_id`
+  - 记录调用过的 tools、输入、输出摘要、中间结果和最终输出
+- `WorkflowRunner`
+  - 当前内置 `research_and_answer`
+  - 按固定顺序执行 `search_knowledge -> answer_question`
+  - 输出稳定 JSON，便于 CLI、脚本和后续 runtime 复用
+
+当前边界：
+
+- 不是完整自主 Agent 平台
+- 不包含 planner、memory、multi-agent orchestration
+- workflow 仍然是 deterministic stub，而不是开放式 Agent loop
+
 ## 测试
 
 ```bash
@@ -198,6 +239,7 @@ uv run ruff check .
 - 新增真实 vector store 后端，并实现 `BaseVectorStore`
 - 新增真实 LLM / reranker provider，并通过 factory 接入
 - 在当前 transform contract 上继续扩展 OCR、图像 captioning 和更复杂的 PDF 版面处理
+- 在当前 agent-ready contract 上继续扩展 planner、memory 和更复杂的 workflow orchestration
 - 在不改 application 层的前提下接入 HTTP、真实 MCP SDK/stdio transport
 
 详细需求、边界和后续里程碑请参考：
