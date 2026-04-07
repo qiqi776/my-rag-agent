@@ -1706,12 +1706,13 @@ ingestion trace 建议稳定记录：
    - CLI 只负责装配和演示，不承载 Agent 业务逻辑
 
 10. 与现有接口层的关系：
-   - M9 应明确：
-   - MCP tools 仍是协议层入口
-   - Agent-ready tools 是应用侧编排入口
-   - 两者可以共享 service，但不应互相复制实现
-   - 若已有 MCP tool 能复用的 mapper / payload，应优先复用稳定 contract
-   - 不要让 Agent 层反向侵入 `SearchService`、`AnswerService`、`DocumentService`
+
+- M9 应明确：
+- MCP tools 仍是协议层入口
+- Agent-ready tools 是应用侧编排入口
+- 两者可以共享 service，但不应互相复制实现
+- 若已有 MCP tool 能复用的 mapper / payload，应优先复用稳定 contract
+- 不要让 Agent 层反向侵入 `SearchService`、`AnswerService`、`DocumentService`
 
 11. 测试：
 
@@ -1781,6 +1782,378 @@ ingestion trace 建议稳定记录：
 - M9 的重点不是“做一个会自己思考的 Agent”，而是把当前工程整理成可被 Agent 安全调用的上层能力
 - Agent-ready 层应建立在 M1-M8 已稳定的类型、service、response、trace、evaluation 契约之上
 
+### 里程碑 M10：真实问答与交互式体验
+
+目标
+
+- 把项目从“可运行的模块化 RAG 工程”推进到“能产出人能看懂回答”的阶段
+- 在不破坏现有 application service 边界的前提下，引入真实 provider 与交互式问答入口
+- 补上 PDF 抽取质量控制，避免“ingest 成功但文本不可读”的假成功
+- 为后续 Dashboard、真实多模态、生产级部署打下可用的数据质量和回答质量基础
+
+范围
+
+- 本轮重点做：
+  - 真实 embedding provider
+  - 真实 llm provider
+  - 交互式 chat CLI
+  - PDF 抽取质量检查
+  - ingest 预览能力
+  - retrieval / answer 参数调优
+- 本轮不做：
+  - Dashboard
+  - 长时记忆
+  - 多 Agent 编排
+  - 完整 Web 前端
+  - 重量级多模态图片检索平台
+
+#### M10.1：配置与契约扩展
+
+目标
+
+- 先把真实 provider 所需配置补齐，避免后续 M10.2 / M10.3 反复改 settings 契约
+
+改动范围
+
+- `src/core/settings.py`
+- `config/settings.yaml.example`
+- `README.md`
+
+要求
+
+- `EmbeddingAdapterSettings` 至少补：
+  - `model`
+  - `api_key`
+  - `base_url`
+  - `azure_endpoint`
+  - `deployment_name`
+  - `api_version`
+- `LLMAdapterSettings` 至少补：
+  - `model`
+  - `api_key`
+  - `base_url`
+  - `azure_endpoint`
+  - `deployment_name`
+  - `api_version`
+  - `temperature`
+- `RerankerAdapterSettings` 至少补：
+  - `model`
+  - `api_key`
+  - `base_url`
+- 旧的 `fake` 配置必须继续可用
+- 缺失必填字段时给出清晰 `ConfigError`
+
+测试
+
+- `tests/unit/test_settings_real_providers.py`
+- 至少覆盖：
+  - 真实 provider 配置加载成功
+  - 缺失必填字段时报错
+  - `fake` 配置向后兼容
+
+验收命令
+
+- `./.venv/bin/ruff check src/core/settings.py tests/unit/test_settings_real_providers.py`
+- `./.venv/bin/pytest tests/unit/test_settings_real_providers.py`
+
+建议提交信息
+
+- `feat: extend settings for real model providers`
+
+#### M10.2：真实 Embedding Provider
+
+目标
+
+- 让检索从 `fake embedding` 升级到真实语义向量
+
+改动范围
+
+- `src/adapters/embedding/openai_embedding.py`
+- `src/adapters/embedding/factory.py`
+- `src/adapters/embedding/__init__.py`
+- `pyproject.toml`
+- `README.md`
+
+要求
+
+- 继续实现 `BaseEmbedding`
+- `factory` 至少支持：
+  - `fake`
+  - `openai`
+- `embed_texts()` 支持批量调用
+- 对空文本和 provider 错误有稳定处理
+- 测试中不得依赖真实外网
+
+测试
+
+- `tests/unit/test_openai_embedding.py`
+- `tests/unit/test_embedding_factory_real.py`
+- 至少覆盖：
+  - factory 路由正确
+  - 批量输入调用正确
+  - 空输入处理正确
+  - provider 错误映射正确
+
+验收命令
+
+- `./.venv/bin/ruff check src/adapters/embedding tests/unit/test_openai_embedding.py tests/unit/test_embedding_factory_real.py`
+- `./.venv/bin/pytest tests/unit/test_openai_embedding.py tests/unit/test_embedding_factory_real.py`
+
+建议提交信息
+
+- `feat: add real embedding provider support`
+
+#### M10.3：真实 LLM Provider
+
+目标
+
+- 把回答生成从模板拼接升级为真实模型生成
+
+改动范围
+
+- `src/adapters/llm/openai_llm.py`
+- `src/adapters/llm/factory.py`
+- `src/adapters/llm/__init__.py`
+- `src/application/answer_service.py`
+- `src/response/answer_builder.py`
+- `README.md`
+
+要求
+
+- 继续实现 `BaseLLM`
+- `factory` 至少支持：
+  - `fake`
+  - `openai`
+- 输入契约仍保持：
+  - `query`
+  - `contexts`
+  - `max_chars`
+- provider 层不直接耦合 CLI 输出格式
+- 无 supporting context 时保留稳定降级行为
+
+测试
+
+- `tests/unit/test_openai_llm.py`
+- `tests/unit/test_llm_factory_real.py`
+- `tests/integration/test_real_answer_flow.py`
+- 至少覆盖：
+  - factory 路由正确
+  - LLM 输入构造正确
+  - 无上下文时行为稳定
+  - provider 异常映射正确
+
+验收命令
+
+- `./.venv/bin/ruff check src/adapters/llm src/application/answer_service.py tests/unit/test_openai_llm.py tests/unit/test_llm_factory_real.py tests/integration/test_real_answer_flow.py`
+- `./.venv/bin/pytest tests/unit/test_openai_llm.py tests/unit/test_llm_factory_real.py tests/integration/test_real_answer_flow.py`
+
+建议提交信息
+
+- `feat: add real llm provider support`
+
+#### M10.4：交互式 Chat CLI
+
+目标
+
+- 提供真正连续提问的问答模式，而不是每次都手动执行一次 answer 命令
+
+改动范围
+
+- `src/interfaces/cli/chat.py`
+- `src/interfaces/cli/common.py`（如需要抽公共装配）
+- `pyproject.toml`
+- `README.md`
+
+要求
+
+- 在 `pyproject.toml` 注册 `mrag-chat`
+- 支持：
+  - `--config`
+  - `--collection`
+  - `--mode`
+- 支持：
+  - `/help`
+  - `/exit`
+- 每轮调用现有 `AnswerService`
+- 第一版不做长时记忆或复杂会话压缩
+
+测试
+
+- `tests/unit/test_chat_cli.py`
+- `tests/e2e/test_chat_session.py`
+- 至少覆盖：
+  - 参数解析正确
+  - `/exit` 能退出
+  - 多轮输入会多次调用 answer 链路
+  - 输出包含 answer 与 citations
+
+验收命令
+
+- `./.venv/bin/ruff check src/interfaces/cli/chat.py tests/unit/test_chat_cli.py tests/e2e/test_chat_session.py pyproject.toml`
+- `./.venv/bin/pytest tests/unit/test_chat_cli.py tests/e2e/test_chat_session.py`
+
+建议提交信息
+
+- `feat: add interactive chat cli`
+
+#### M10.5：PDF 抽取质量检查
+
+目标
+
+- 避免“PDF ingest 成功，但抽出的文本几乎不可读”的假成功
+
+改动范围
+
+- `src/adapters/loader/pdf_loader.py`
+- `src/application/ingest_service.py`
+- `src/core/settings.py`
+- `README.md`
+
+要求
+
+- 至少计算：
+  - `non_empty_page_ratio`
+  - `printable_char_ratio`
+  - `alnum_ratio`
+  - `suspicious_symbol_ratio`
+- 在 metadata 中写入：
+  - `quality_status`
+  - `quality_warnings`
+- 在 ingestion trace 中记录质量信息
+- 默认先 warning，不强制 hard fail；是否拒绝入库应由配置决定
+
+测试
+
+- `tests/unit/test_pdf_quality_checks.py`
+- `tests/unit/test_pdf_loader.py`
+- `tests/integration/test_pdf_ingestion.py`
+- 至少覆盖：
+  - 正常 PDF 判定为 `good`
+  - 明显乱码文本判定为 `warning` 或 `bad`
+  - metadata 和 trace 中都能看到质量字段
+
+验收命令
+
+- `./.venv/bin/ruff check src/adapters/loader/pdf_loader.py src/application/ingest_service.py tests/unit/test_pdf_quality_checks.py`
+- `./.venv/bin/pytest tests/unit/test_pdf_quality_checks.py tests/unit/test_pdf_loader.py tests/integration/test_pdf_ingestion.py`
+
+建议提交信息
+
+- `feat: add pdf extraction quality checks`
+
+#### M10.6：Ingest 预览
+
+目标
+
+- 在真正入库前让用户先看抽取结果和质量状态
+
+改动范围
+
+- `src/interfaces/cli/ingest_preview.py`
+- `pyproject.toml`
+- `README.md`
+
+要求
+
+- 推荐新增独立命令：
+  - `mrag-ingest-preview`
+- 至少输出：
+  - `doc_id`
+  - `source_path`
+  - `page_count`
+  - `quality_status`
+  - `preview_excerpt`
+  - `warnings`
+- preview 不得写入 vector store
+
+测试
+
+- `tests/unit/test_ingest_preview_cli.py`
+- `tests/integration/test_pdf_preview.py`
+- 至少覆盖：
+  - 文本文件预览正常
+  - PDF 预览显示页数和 excerpt
+  - 质量差的 PDF 会显示 warning
+  - preview 模式不产生 store 写入
+
+验收命令
+
+- `./.venv/bin/ruff check src/interfaces/cli/ingest_preview.py tests/unit/test_ingest_preview_cli.py tests/integration/test_pdf_preview.py pyproject.toml`
+- `./.venv/bin/pytest tests/unit/test_ingest_preview_cli.py tests/integration/test_pdf_preview.py`
+
+建议提交信息
+
+- `feat: add ingestion preview command`
+
+#### M10.7：检索与回答调优
+
+目标
+
+- 在真实 provider 和可读文本基础上，把回答质量拉到“基本可读、基本可信”
+
+改动范围
+
+- `config/settings.yaml.example`
+- `src/core/settings.py`
+- `src/application/search_service.py`
+- `src/application/answer_service.py`
+- `src/application/ingest_service.py`
+- `src/interfaces/cli/answer.py`
+- `tests/fixtures/evaluation/answer_cases.json`
+
+要求
+
+- 重点调优：
+  - `chunk_size`
+  - `chunk_overlap`
+  - `max_context_results`
+  - `top_k`
+- 对长 PDF 场景避免切块过碎
+- 保持页级 citation 不丢失
+- 必要时增强 answer CLI 的展示格式
+
+测试
+
+- `tests/integration/test_answer_quality_regression.py`
+- 更新 `tests/fixtures/evaluation/answer_cases.json`
+- 至少覆盖：
+  - 关键问题命中正确文档
+  - citations 仍稳定
+  - answer 关键词覆盖优于旧配置
+
+验收命令
+
+- `./.venv/bin/ruff check .`
+- `./.venv/bin/pytest`
+
+建议提交信息
+
+- `perf: tune retrieval and answer quality for real usage`
+
+约束
+
+- 不要在 M10 里同时做 Dashboard、HTTP 服务、长时记忆和多 Agent
+- 不要把真实 provider 逻辑直接写进 application service
+- 不要让 chat CLI 反向侵入 `AnswerService`
+- 不要在没有质量检查的前提下继续把明显乱码 PDF 当作成功 ingest
+- 每个子阶段都应可以单独测试、单独提交、单独回滚
+
+按照顺序执行
+
+完成前必须执行完整验证
+
+- `./.venv/bin/ruff check .`
+- `./.venv/bin/pytest`
+
+输出要求
+
+- 直接改代码，不要只给方案
+- 最终说明包括：
+  - 做了什么
+  - 新 provider / chat CLI / quality checks 如何复用现有 service contract
+  - 当前 residual risks
+  - 验证结果
+
 ## 构建顺序
 
 推荐构建顺序固定如下：
@@ -1795,6 +2168,7 @@ ingestion trace 建议稳定记录：
 8. evaluation / dashboard
 9. 多模态与 transform pipeline
 10. agent-ready 扩展
+11. 真实问答与交互式体验
 
 禁止顺序：
 
