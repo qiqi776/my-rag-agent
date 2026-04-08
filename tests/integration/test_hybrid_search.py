@@ -11,6 +11,7 @@ from src.adapters.vector_store.factory import create_vector_store
 from src.application.ingest_service import IngestService
 from src.application.search_service import SearchService
 from src.core.settings import load_settings
+from src.core.types import ChunkRecord
 from src.observability.trace_store import TraceStore
 from src.retrieval.sparse_retriever import SparseRetriever
 
@@ -168,3 +169,60 @@ def test_dense_mode_override_still_works_with_hybrid_capable_setup(tmp_path: Pat
         "embed_query",
         "dense_retrieve",
     ]
+
+
+@pytest.mark.integration
+def test_search_service_can_filter_by_doc_type(tmp_path: Path) -> None:
+    config_path = tmp_path / "settings.yaml"
+    storage_path = tmp_path / "store.json"
+    trace_path = tmp_path / "trace.jsonl"
+    _write_settings(config_path, storage_path, trace_path, retrieval_mode="hybrid")
+    settings = load_settings(config_path)
+
+    vector_store = create_vector_store(settings)
+    vector_store.upsert(
+        "knowledge",
+        [
+            ChunkRecord(
+                id="chunk-text",
+                doc_id="doc-text",
+                text="virtual memory address space",
+                embedding=[1.0] * settings.adapters.embedding.dimensions,
+                metadata={
+                    "source_path": str((tmp_path / "memory.txt").resolve()),
+                    "collection": "knowledge",
+                    "chunk_index": 0,
+                    "doc_type": "text",
+                },
+            ),
+            ChunkRecord(
+                id="chunk-pdf",
+                doc_id="doc-pdf",
+                text="virtual memory paging",
+                embedding=[1.0] * settings.adapters.embedding.dimensions,
+                metadata={
+                    "source_path": str((tmp_path / "memory.pdf").resolve()),
+                    "collection": "knowledge",
+                    "chunk_index": 0,
+                    "doc_type": "pdf",
+                },
+            ),
+        ],
+    )
+    search_service = SearchService(
+        settings=settings,
+        embedding=create_embedding(settings),
+        vector_store=vector_store,
+        sparse_retriever=SparseRetriever(vector_store),
+        trace_store=TraceStore(trace_path),
+    )
+
+    response = search_service.search(
+        "virtual memory",
+        collection="knowledge",
+        top_k=2,
+        filters={"doc_type": "pdf"},
+    )
+
+    assert response.results
+    assert [result.doc_id for result in response.results] == ["doc-pdf"]

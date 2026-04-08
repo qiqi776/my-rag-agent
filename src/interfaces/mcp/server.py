@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -12,8 +13,11 @@ from src.core.errors import ConfigError, EmptyQueryError, UnsupportedRetrievalMo
 from src.interfaces.mcp.dependencies import MCPDependencies, build_dependencies
 from src.interfaces.mcp.mappers import format_json_payload, map_error
 from src.interfaces.mcp.models import MCPTool, MCPToolResult
+from src.interfaces.mcp.protocol_handler import MCPProtocolHandler
 from src.interfaces.mcp.tools import (
     register_delete_document_tool,
+    register_get_document_summary_tool,
+    register_list_collections_tool,
     register_list_documents_tool,
     register_query_knowledge_tool,
 )
@@ -89,6 +93,8 @@ def create_mcp_server(config_path: str | Path | None = None) -> MCPServer:
     dependencies = build_dependencies(config_path)
     server = MCPServer(dependencies)
     register_query_knowledge_tool(server, dependencies)
+    register_list_collections_tool(server, dependencies)
+    register_get_document_summary_tool(server, dependencies)
     register_list_documents_tool(server, dependencies)
     register_delete_document_tool(server, dependencies)
     return server
@@ -120,7 +126,93 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to configuration file.",
     )
 
+    stdio_parser = subparsers.add_parser(
+        "serve-stdio",
+        help="Serve formal MCP/JSON-RPC messages over stdio.",
+    )
+    stdio_parser.add_argument(
+        "--config",
+        default=str(Path("config/settings.yaml.example")),
+        help="Path to configuration file.",
+    )
+
     return parser
+
+
+def _serve_stdio(server: MCPServer) -> int:
+    handler = MCPProtocolHandler(server)
+    while True:
+        try:
+            payload = _read_framed_message()
+        except ValueError as exc:
+            _write_framed_message(handler.parse_error(str(exc)))
+            continue
+        if payload is None:
+            break
+        if not isinstance(payload, dict):
+            _write_framed_message(handler.parse_error("Request payload must be a JSON object"))
+            continue
+        response = handler.handle_payload(payload)
+        _write_framed_message(response)
+    return 0
+
+
+def _read_framed_message() -> dict[str, Any] | None:
+    stream = sys.stdin.buffer
+    headers: dict[str, str] = {}
+
+    while True:
+        line = stream.readline()
+        if line == b"":
+            return None
+        if line in {b"\r\n", b"\n"}:
+            break
+        try:
+            decoded = line.decode("ascii").strip()
+        except UnicodeDecodeError as exc:
+            raise ValueError("Invalid non-ASCII header in stdio message") from exc
+        if ":" not in decoded:
+            raise ValueError("Malformed stdio header")
+        key, value = decoded.split(":", 1)
+        headers[key.strip().lower()] = value.strip()
+
+    content_length_raw = headers.get("content-length")
+    if content_length_raw is None:
+        raise ValueError("Missing Content-Length header")
+    try:
+        content_length = int(content_length_raw)
+    except ValueError as exc:
+        raise ValueError("Invalid Content-Length header") from exc
+    if content_length < 0:
+        raise ValueError("Content-Length must be >= 0")
+
+    body = stream.read(content_length)
+    if len(body) != content_length:
+        raise ValueError("Unexpected EOF while reading framed stdio message")
+
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except UnicodeDecodeError as exc:
+        raise ValueError("Invalid UTF-8 in stdio payload") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(str(exc)) from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError("Request payload must be a JSON object")
+    return payload
+
+
+def _write_framed_message(payload: dict[str, Any]) -> None:
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    header = (
+        f"Content-Length: {len(body)}\r\n"
+        "Content-Type: application/json\r\n"
+        "\r\n"
+    ).encode("ascii")
+    stream = sys.stdout.buffer
+    stream.write(header)
+    stream.write(body)
+    stream.flush()
 
 
 def main() -> int:
@@ -128,6 +220,9 @@ def main() -> int:
 
     args = build_parser().parse_args()
     server = create_mcp_server(args.config)
+
+    if args.command == "serve-stdio":
+        return _serve_stdio(server)
 
     if args.command == "list-tools":
         payload = {
@@ -156,3 +251,7 @@ def main() -> int:
     result = server.call_tool(args.name, arguments)
     print(format_json_payload(result.to_dict()))
     return 1 if result.is_error else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

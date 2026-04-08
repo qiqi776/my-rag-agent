@@ -19,6 +19,12 @@ dev = [
     "pytest-asyncio>=1.0",
     "ruff>=0.15",
 ]
+vector = [
+    "chromadb>=0.5",
+]
+rerank = [
+    "sentence-transformers>=3.0",
+]
 
 [project.scripts]
 mrag-ingest = "src.interfaces.cli.ingest:main"

@@ -138,6 +138,42 @@ def _validate_real_provider_settings(
             raise ConfigError(f"{adapter_path}.api_version is required for provider 'azure'")
 
 
+def _validate_reranker_provider_settings(
+    adapter_path: str,
+    provider: str,
+    *,
+    model: str | None,
+    api_key: str | None,
+    azure_endpoint: str | None,
+    deployment_name: str | None,
+    api_version: str | None,
+) -> None:
+    if provider == "fake":
+        return
+
+    if model is None:
+        raise ConfigError(f"{adapter_path}.model is required for provider '{provider}'")
+
+    if provider == "llm":
+        if api_key is None:
+            raise ConfigError(f"{adapter_path}.api_key is required for provider 'llm'")
+        if azure_endpoint is not None:
+            if deployment_name is None:
+                raise ConfigError(
+                    f"{adapter_path}.deployment_name is required when azure_endpoint is set"
+                )
+            if api_version is None:
+                raise ConfigError(
+                    f"{adapter_path}.api_version is required when azure_endpoint is set"
+                )
+        return
+
+    if provider == "cross_encoder":
+        return
+
+    raise ConfigError(f"Unsupported reranker provider: {provider}")
+
+
 @dataclass(frozen=True, slots=True)
 class ProjectSettings:
     name: str
@@ -454,7 +490,7 @@ class Settings:
             "api_version",
             "adapters.reranker",
         )
-        _validate_real_provider_settings(
+        _validate_reranker_provider_settings(
             "adapters.reranker",
             reranker_provider,
             model=reranker_model,

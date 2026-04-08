@@ -85,6 +85,8 @@ def test_mcp_smoke_list_tools_and_call_query(
     list_output = json.loads(capsys.readouterr().out)
     assert [tool["name"] for tool in list_output["tools"]] == [
         "delete_document",
+        "get_document_summary",
+        "list_collections",
         "list_documents",
         "query_knowledge",
     ]

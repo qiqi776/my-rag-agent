@@ -22,6 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Query the RAG vector store.")
     parser.add_argument("query", help="Query text.")
     parser.add_argument("--collection", default=None, help="Target collection.")
+    parser.add_argument("--doc-type", default=None, help="Optional document type filter.")
     parser.add_argument("--top-k", type=int, default=None, help="Maximum number of results.")
     parser.add_argument(
         "--mode",
@@ -68,6 +69,7 @@ def main() -> int:
             collection=args.collection,
             top_k=args.top_k,
             mode=args.mode,
+            filters={"doc_type": args.doc_type} if args.doc_type else None,
         )
     except (
         ConfigError,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.adapters.vector_store.base_vector_store import BaseVectorStore
-from src.core.types import ChunkRecord, RetrievalResult
+from src.core.types import ChunkRecord, Metadata, RetrievalResult
 
 
 def _cosine_similarity(left: list[float], right: list[float]) -> float:
@@ -17,6 +17,15 @@ def _cosine_similarity(left: list[float], right: list[float]) -> float:
     if left_norm == 0 or right_norm == 0:
         return 0.0
     return dot / (left_norm * right_norm)
+
+
+def _metadata_matches(metadata: Metadata, filters: Metadata | None) -> bool:
+    if not filters:
+        return True
+    for key, expected in filters.items():
+        if metadata.get(key) != expected:
+            return False
+    return True
 
 
 class InMemoryVectorStore(BaseVectorStore):
@@ -31,7 +40,13 @@ class InMemoryVectorStore(BaseVectorStore):
             bucket[record.id] = record
         return len(records)
 
-    def query(self, collection: str, query_vector: list[float], top_k: int) -> list[RetrievalResult]:
+    def query(
+        self,
+        collection: str,
+        query_vector: list[float],
+        top_k: int,
+        filters: Metadata | None = None,
+    ) -> list[RetrievalResult]:
         bucket = self._collections.get(collection, {})
         scored = [
             RetrievalResult(
@@ -42,6 +57,7 @@ class InMemoryVectorStore(BaseVectorStore):
                 metadata=record.metadata.copy(),
             )
             for record in bucket.values()
+            if _metadata_matches(record.metadata, filters)
         ]
         scored.sort(key=lambda item: (-item.score, item.chunk_id))
         return scored[:top_k]

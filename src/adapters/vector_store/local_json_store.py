@@ -8,7 +8,7 @@ from pathlib import Path
 from src.adapters.vector_store.base_vector_store import BaseVectorStore
 from src.adapters.vector_store.in_memory_store import InMemoryVectorStore
 from src.core.settings import resolve_path
-from src.core.types import ChunkRecord, RetrievalResult
+from src.core.types import ChunkRecord, Metadata, RetrievalResult
 
 
 class LocalJsonVectorStore(BaseVectorStore):
@@ -25,9 +25,15 @@ class LocalJsonVectorStore(BaseVectorStore):
         self._flush()
         return upserted
 
-    def query(self, collection: str, query_vector: list[float], top_k: int) -> list[RetrievalResult]:
+    def query(
+        self,
+        collection: str,
+        query_vector: list[float],
+        top_k: int,
+        filters: Metadata | None = None,
+    ) -> list[RetrievalResult]:
         self._refresh()
-        return self._store.query(collection, query_vector, top_k)
+        return self._store.query(collection, query_vector, top_k, filters=filters)
 
     def list_collections(self) -> list[str]:
         self._refresh()

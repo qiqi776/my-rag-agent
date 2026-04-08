@@ -86,6 +86,8 @@ class ProcessedQuery:
     normalized_query: str
     collection: str
     top_k: int
+    keywords: list[str] = field(default_factory=list)
+    filters: Metadata = field(default_factory=dict)
 
     def to_dict(self) -> Metadata:
         return asdict(self)
@@ -103,4 +105,3 @@ class RetrievalResult:
 
     def to_dict(self) -> Metadata:
         return asdict(self)
-

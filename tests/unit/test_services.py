@@ -57,8 +57,21 @@ class RecordingSparseRetriever(SparseRetriever):
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
 
-    def retrieve(self, collection: str, query: str, top_k: int) -> list[RetrievalResult]:
-        self.calls.append({"collection": collection, "query": query, "top_k": top_k})
+    def retrieve(
+        self,
+        collection: str,
+        query: str,
+        top_k: int,
+        filters: dict[str, object] | None = None,
+    ) -> list[RetrievalResult]:
+        self.calls.append(
+            {
+                "collection": collection,
+                "query": query,
+                "top_k": top_k,
+                "filters": filters,
+            }
+        )
         return []
 
 
@@ -67,7 +80,14 @@ class RecordingVectorStore(InMemoryVectorStore):
         super().__init__()
         self.query_top_ks: list[int] = []
 
-    def query(self, collection: str, query_vector: list[float], top_k: int) -> list[RetrievalResult]:
+    def query(
+        self,
+        collection: str,
+        query_vector: list[float],
+        top_k: int,
+        filters: dict[str, object] | None = None,
+    ) -> list[RetrievalResult]:
+        del filters
         self.query_top_ks.append(top_k)
         return super().query(collection, query_vector, top_k)
 
@@ -177,6 +197,7 @@ def test_search_service_uses_candidate_top_k_boundaries_for_hybrid_mode(tmp_path
             "collection": "knowledge",
             "query": "semantic embeddings",
             "top_k": 9,
+            "filters": None,
         }
     ]
 

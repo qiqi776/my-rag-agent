@@ -18,6 +18,7 @@ class StubSearchService:
         collection: str | None = None,
         top_k: int | None = None,
         mode: str | None = None,
+        filters: dict[str, object] | None = None,
     ) -> SearchOutput:
         self.calls.append(
             {
@@ -25,6 +26,7 @@ class StubSearchService:
                 "collection": collection,
                 "top_k": top_k,
                 "mode": mode,
+                "filters": filters,
             }
         )
         return SearchOutput(
@@ -79,10 +81,21 @@ def test_query_tool_calls_search_service_and_returns_structured_payload() -> Non
             "collection": "knowledge",
             "top_k": 2,
             "mode": "hybrid",
+            "filters": None,
         }
     ]
     assert result.structured_content["kind"] == "search_output"
     assert result.structured_content["citations"][0]["collection"] == "knowledge"
+
+
+@pytest.mark.unit
+def test_query_tool_passes_doc_type_filter() -> None:
+    search_service = StubSearchService()
+    tool = QueryKnowledgeTool(SimpleNamespace(search_service=search_service))
+
+    tool.handle({"query": "semantic embeddings", "doc_type": "pdf"})
+
+    assert search_service.calls[0]["filters"] == {"doc_type": "pdf"}
 
 
 @pytest.mark.unit

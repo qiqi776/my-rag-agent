@@ -74,11 +74,23 @@ class AnswerService:
         )
 
         rerank_started = time.monotonic()
-        reranked_results = self.reranker.rerank(
-            search_output.normalized_query,
-            search_output.results,
-            top_k=candidate_limit,
-        )
+        rerank_fallback = False
+        rerank_error: str | None = None
+        try:
+            reranked_results = self.reranker.rerank(
+                search_output.normalized_query,
+                search_output.results,
+                top_k=candidate_limit,
+            )
+        except Exception as exc:
+            rerank_fallback = True
+            rerank_error = str(exc)
+            self.logger.warning(
+                "Reranker '%s' failed, falling back to search order: %s",
+                self.reranker.provider,
+                exc,
+            )
+            reranked_results = search_output.results[:candidate_limit]
         supporting_results = reranked_results[:context_limit]
         trace.record_stage(
             "rerank",
@@ -87,6 +99,8 @@ class AnswerService:
                 "candidate_result_count": len(reranked_results),
                 "selected_result_count": len(supporting_results),
                 "provider": self.reranker.provider,
+                "fallback": rerank_fallback,
+                "error": rerank_error,
             },
             elapsed_ms=(time.monotonic() - rerank_started) * 1000.0,
         )

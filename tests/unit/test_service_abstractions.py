@@ -78,7 +78,14 @@ class StubVectorStore(BaseVectorStore):
             bucket[record.id] = record
         return len(records)
 
-    def query(self, collection: str, query_vector: list[float], top_k: int) -> list[RetrievalResult]:
+    def query(
+        self,
+        collection: str,
+        query_vector: list[float],
+        top_k: int,
+        filters: dict[str, object] | None = None,
+    ) -> list[RetrievalResult]:
+        del filters
         records = list(self._collections.get(collection, {}).values())[:top_k]
         return [
             RetrievalResult(

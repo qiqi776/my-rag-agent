@@ -45,3 +45,42 @@ class MCPToolResult:
             "structuredContent": self.structured_content,
             "isError": self.is_error,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class JSONRPCError:
+    """Stable JSON-RPC error payload."""
+
+    code: int
+    message: str
+    data: dict[str, Any] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = {
+            "code": self.code,
+            "message": self.message,
+        }
+        if self.data is not None:
+            payload["data"] = self.data
+        return payload
+
+
+@dataclass(frozen=True, slots=True)
+class JSONRPCResponse:
+    """Minimal JSON-RPC 2.0 response."""
+
+    id: str | int | None
+    result: dict[str, Any] | None = None
+    error: JSONRPCError | None = None
+    jsonrpc: str = "2.0"
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "jsonrpc": self.jsonrpc,
+            "id": self.id,
+        }
+        if self.error is not None:
+            payload["error"] = self.error.to_dict()
+        else:
+            payload["result"] = self.result or {}
+        return payload

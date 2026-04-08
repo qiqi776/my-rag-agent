@@ -9,6 +9,7 @@ from src.adapters.loader.factory import create_loader
 from src.adapters.vector_store.factory import create_vector_store
 from src.application.ingest_service import IngestService
 from src.core.settings import load_settings
+from src.interfaces.mcp.protocol_handler import MCPProtocolHandler
 from src.interfaces.mcp.server import create_mcp_server
 from src.observability.trace_store import TraceStore
 
@@ -75,7 +76,13 @@ def test_mcp_server_reuses_application_services_for_query_and_documents(tmp_path
     server = create_mcp_server(config_path)
 
     tool_names = [tool.name for tool in server.list_tools()]
-    assert tool_names == ["delete_document", "list_documents", "query_knowledge"]
+    assert tool_names == [
+        "delete_document",
+        "get_document_summary",
+        "list_collections",
+        "list_documents",
+        "query_knowledge",
+    ]
 
     query_result = server.call_tool(
         "query_knowledge",
@@ -93,6 +100,18 @@ def test_mcp_server_reuses_application_services_for_query_and_documents(tmp_path
     assert not list_result.is_error
     assert list_result.structured_content["documents"][0]["doc_id"] == ingest_result.doc_id
 
+    collections_result = server.call_tool("list_collections", {})
+    assert not collections_result.is_error
+    assert collections_result.structured_content["collections"] == ["knowledge"]
+
+    detail_result = server.call_tool(
+        "get_document_summary",
+        {"doc_id": ingest_result.doc_id, "collection": "knowledge"},
+    )
+    assert not detail_result.is_error
+    assert detail_result.structured_content["found"] is True
+    assert detail_result.structured_content["doc_id"] == ingest_result.doc_id
+
     delete_result = server.call_tool(
         "delete_document",
         {"doc_id": ingest_result.doc_id, "collection": "knowledge"},
@@ -103,3 +122,14 @@ def test_mcp_server_reuses_application_services_for_query_and_documents(tmp_path
     not_found_result = server.call_tool("missing_tool", {})
     assert not_found_result.is_error
     assert not_found_result.structured_content["error"]["code"] == "tool_not_found"
+
+    protocol_handler = MCPProtocolHandler(server)
+    payload = protocol_handler.handle_payload(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/list",
+            "params": {},
+        }
+    )
+    assert payload["result"]["tools"][0]["name"] == "delete_document"

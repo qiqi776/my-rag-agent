@@ -130,3 +130,55 @@ def test_document_service_delete_only_removes_target_collection(tmp_path: Path) 
     assert [(item.collection, item.doc_id) for item in service.list_documents("beta")] == [
         ("beta", "doc-a")
     ]
+
+
+@pytest.mark.unit
+def test_document_service_exposes_collections_and_document_summary(tmp_path: Path) -> None:
+    config_path = tmp_path / "settings.yaml"
+    storage_path = tmp_path / "store.json"
+    _write_settings(config_path, storage_path)
+    settings = load_settings(config_path)
+
+    store = InMemoryVectorStore()
+    store.upsert(
+        "knowledge",
+        [
+            ChunkRecord(
+                id="c-1",
+                doc_id="doc-1",
+                text="Virtual memory gives each process an isolated address space.",
+                embedding=[1.0, 0.0],
+                metadata={
+                    "source_path": "/tmp/ostep.txt",
+                    "collection": "knowledge",
+                    "chunk_index": 0,
+                    "doc_type": "text",
+                },
+            )
+        ],
+    )
+    service = DocumentService(settings=settings, vector_store=store)
+
+    collections = service.list_collections()
+    detail = service.get_document_summary("doc-1", collection="knowledge")
+
+    assert collections == ["knowledge"]
+    assert detail is not None
+    assert detail.preview.startswith("Virtual memory")
+    assert detail.metadata["doc_type"] == "text"
+
+
+@pytest.mark.unit
+def test_document_service_rejects_ambiguous_doc_id_without_collection(tmp_path: Path) -> None:
+    config_path = tmp_path / "settings.yaml"
+    storage_path = tmp_path / "store.json"
+    _write_settings(config_path, storage_path)
+    settings = load_settings(config_path)
+
+    store = InMemoryVectorStore()
+    store.upsert("alpha", [_record("a-1", "doc-a", "alpha", 0, "/tmp/alpha.txt")])
+    store.upsert("beta", [_record("b-1", "doc-a", "beta", 0, "/tmp/beta.txt")])
+    service = DocumentService(settings=settings, vector_store=store)
+
+    with pytest.raises(ValueError, match="multiple collections"):
+        service.get_document_summary("doc-a")

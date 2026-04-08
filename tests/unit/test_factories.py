@@ -14,6 +14,7 @@ from src.adapters.loader.pdf_loader import PdfLoader
 from src.adapters.reranker.base_reranker import BaseReranker
 from src.adapters.reranker.factory import create_reranker
 from src.adapters.vector_store.base_vector_store import BaseVectorStore
+from src.adapters.vector_store.chroma_store import ChromaVectorStore
 from src.adapters.vector_store.factory import create_vector_store
 from src.adapters.vector_store.in_memory_store import InMemoryVectorStore
 from src.adapters.vector_store.local_json_store import LocalJsonVectorStore
@@ -99,6 +100,28 @@ def test_vector_store_factory_supports_memory_provider(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_vector_store_factory_supports_chroma_provider(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "settings.yaml"
+    _write_settings(config_path, tmp_path / "chroma")
+    raw = config_path.read_text(encoding="utf-8").replace('provider: "local_json"', 'provider: "chroma"')
+    config_path.write_text(raw, encoding="utf-8")
+    settings = load_settings(config_path)
+
+    class _StubChromaStore(ChromaVectorStore):
+        def __init__(self, storage_path: Path) -> None:
+            self.storage_path = storage_path
+
+    monkeypatch.setattr("src.adapters.vector_store.factory.ChromaVectorStore", _StubChromaStore)
+
+    vector_store = create_vector_store(settings)
+
+    assert isinstance(vector_store, _StubChromaStore)
+
+
+@pytest.mark.unit
 def test_loader_factory_supports_pdf_provider(tmp_path: Path) -> None:
     config_path = tmp_path / "settings.yaml"
     _write_settings(
@@ -122,3 +145,72 @@ def test_factory_rejects_unknown_provider(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigError, match="Unsupported vector_store provider"):
         create_vector_store(settings)
+
+
+@pytest.mark.unit
+def test_reranker_factory_supports_llm_provider(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "settings.yaml"
+    _write_settings(config_path, tmp_path / "store.json")
+    raw = config_path.read_text(encoding="utf-8").replace(
+        'provider: "fake"\nobservability:',
+        'provider: "llm"\n    model: "rerank-1"\n    api_key: "test-key"\nobservability:',
+    )
+    config_path.write_text(raw, encoding="utf-8")
+    settings = load_settings(config_path)
+
+    class _StubLLMReranker(BaseReranker):
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        @property
+        def provider(self) -> str:
+            return "llm"
+
+        def rerank(self, query: str, results: list, top_k: int | None = None) -> list:
+            return results
+
+    monkeypatch.setattr("src.adapters.reranker.factory.LLMReranker", _StubLLMReranker)
+
+    reranker = create_reranker(settings)
+
+    assert isinstance(reranker, _StubLLMReranker)
+    assert reranker.kwargs["model"] == "rerank-1"
+
+
+@pytest.mark.unit
+def test_reranker_factory_supports_cross_encoder_provider(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "settings.yaml"
+    _write_settings(config_path, tmp_path / "store.json")
+    raw = config_path.read_text(encoding="utf-8").replace(
+        'provider: "fake"\nobservability:',
+        'provider: "cross_encoder"\n    model: "cross-encoder-mini"\nobservability:',
+    )
+    config_path.write_text(raw, encoding="utf-8")
+    settings = load_settings(config_path)
+
+    class _StubCrossEncoderReranker(BaseReranker):
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        @property
+        def provider(self) -> str:
+            return "cross_encoder"
+
+        def rerank(self, query: str, results: list, top_k: int | None = None) -> list:
+            return results
+
+    monkeypatch.setattr(
+        "src.adapters.reranker.factory.CrossEncoderReranker",
+        _StubCrossEncoderReranker,
+    )
+
+    reranker = create_reranker(settings)
+
+    assert isinstance(reranker, _StubCrossEncoderReranker)
+    assert reranker.kwargs["model"] == "cross-encoder-mini"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from src.core.types import ChunkRecord, RetrievalResult
+from src.core.types import ChunkRecord, Metadata, RetrievalResult
 
 
 class BaseVectorStore(ABC):
@@ -15,7 +15,13 @@ class BaseVectorStore(ABC):
         """Insert or replace chunk records in a collection."""
 
     @abstractmethod
-    def query(self, collection: str, query_vector: list[float], top_k: int) -> list[RetrievalResult]:
+    def query(
+        self,
+        collection: str,
+        query_vector: list[float],
+        top_k: int,
+        filters: Metadata | None = None,
+    ) -> list[RetrievalResult]:
         """Return the highest scoring matches for a query vector."""
 
     @abstractmethod

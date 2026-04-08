@@ -63,7 +63,7 @@ def test_load_settings_supports_real_provider_configuration_fields(tmp_path: Pat
     api_version: "2024-02-15-preview"
     temperature: 0.2
   reranker:
-    provider: "openai"
+    provider: "llm"
     model: "rerank-1"
     api_key: "reranker-key"
     base_url: "https://api.openai.com/v1"
@@ -83,7 +83,7 @@ def test_load_settings_supports_real_provider_configuration_fields(tmp_path: Pat
     assert settings.adapters.llm.deployment_name == "gpt-4o-mini"
     assert settings.adapters.llm.api_version == "2024-02-15-preview"
     assert settings.adapters.llm.temperature == pytest.approx(0.2)
-    assert settings.adapters.reranker.provider == "openai"
+    assert settings.adapters.reranker.provider == "llm"
     assert settings.adapters.reranker.model == "rerank-1"
     assert settings.adapters.reranker.api_key == "reranker-key"
     assert settings.adapters.reranker.base_url == "https://api.openai.com/v1"

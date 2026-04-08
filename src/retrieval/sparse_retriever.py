@@ -8,13 +8,29 @@ from collections import Counter
 from dataclasses import dataclass
 
 from src.adapters.vector_store.base_vector_store import BaseVectorStore
-from src.core.types import ChunkRecord, RetrievalResult
+from src.core.types import ChunkRecord, Metadata, RetrievalResult
 
 _TOKEN_PATTERN = re.compile(r"\w+")
 
 
 def _tokenize(text: str) -> list[str]:
     return _TOKEN_PATTERN.findall(text.lower())
+
+
+def _metadata_matches(metadata: Metadata, filters: Metadata | None) -> bool:
+    if not filters:
+        return True
+    for key, expected in filters.items():
+        if key == "collection":
+            continue
+        value = metadata.get(key)
+        if isinstance(expected, list):
+            if value not in expected:
+                return False
+            continue
+        if value != expected:
+            return False
+    return True
 
 
 @dataclass(slots=True)
@@ -46,10 +62,14 @@ class SparseRetriever:
         self.k1 = k1
         self.b = b
 
-    def build_index(self, collection: str) -> SparseIndex:
+    def build_index(self, collection: str, filters: Metadata | None = None) -> SparseIndex:
         """Build a sparse index from chunk records in a collection."""
 
-        records = self.vector_store.list_records(collection)
+        records = [
+            record
+            for record in self.vector_store.list_records(collection)
+            if _metadata_matches(record.metadata, filters)
+        ]
         record_map: dict[str, ChunkRecord] = {}
         term_frequencies: dict[str, Counter[str]] = {}
         document_frequencies: Counter[str] = Counter()
@@ -78,7 +98,13 @@ class SparseRetriever:
             average_document_length=average_document_length,
         )
 
-    def retrieve(self, collection: str, query: str, top_k: int) -> list[RetrievalResult]:
+    def retrieve(
+        self,
+        collection: str,
+        query: str,
+        top_k: int,
+        filters: Metadata | None = None,
+    ) -> list[RetrievalResult]:
         """Run sparse retrieval against a collection."""
 
         if top_k <= 0:
@@ -88,7 +114,7 @@ class SparseRetriever:
         if not query_terms:
             return []
 
-        index = self.build_index(collection)
+        index = self.build_index(collection, filters=filters)
         if not index.records:
             return []
 

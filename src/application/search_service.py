@@ -9,11 +9,12 @@ from src.adapters.vector_store.base_vector_store import BaseVectorStore
 from src.core.errors import EmptyQueryError, UnsupportedRetrievalModeError
 from src.core.settings import Settings
 from src.core.trace import TraceContext
-from src.core.types import ProcessedQuery
+from src.core.types import Metadata
 from src.observability.logger import get_logger
 from src.observability.trace_store import TraceStore
 from src.response.response_builder import ResponseBuilder, SearchOutput
 from src.retrieval.fusion import rrf_fuse
+from src.retrieval.query_processor import QueryProcessor
 from src.retrieval.sparse_retriever import SparseRetriever
 
 
@@ -26,6 +27,7 @@ class SearchService:
         embedding: BaseEmbedding,
         vector_store: BaseVectorStore,
         sparse_retriever: SparseRetriever | None = None,
+        query_processor: QueryProcessor | None = None,
         response_builder: ResponseBuilder | None = None,
         trace_store: TraceStore | None = None,
     ) -> None:
@@ -33,6 +35,9 @@ class SearchService:
         self.embedding = embedding
         self.vector_store = vector_store
         self.sparse_retriever = sparse_retriever
+        self.query_processor = query_processor or QueryProcessor(
+            settings.ingestion.default_collection
+        )
         self.response_builder = response_builder or ResponseBuilder()
         self.trace_store = trace_store
         self.logger = get_logger("minimal-rag.search", settings.observability.log_level)
@@ -43,6 +48,7 @@ class SearchService:
         collection: str | None = None,
         top_k: int | None = None,
         mode: str | None = None,
+        filters: Metadata | None = None,
     ) -> SearchOutput:
         """Execute dense-only or hybrid retrieval."""
 
@@ -56,11 +62,11 @@ class SearchService:
                 f"Unsupported retrieval mode: {retrieval_mode}"
             )
 
-        processed = ProcessedQuery(
-            original_query=query,
-            normalized_query=normalized,
-            collection=collection or self.settings.ingestion.default_collection,
+        processed = self.query_processor.process(
+            query=query,
+            collection=collection,
             top_k=top_k or self.settings.retrieval.dense_top_k,
+            filters=filters,
         )
         trace = TraceContext(
             trace_type="query",
@@ -69,6 +75,8 @@ class SearchService:
                 "collection": processed.collection,
                 "top_k": processed.top_k,
                 "mode": retrieval_mode,
+                "keywords": processed.keywords,
+                "filters": processed.filters,
             },
         )
 
@@ -90,6 +98,7 @@ class SearchService:
             processed.collection,
             query_vector=query_vector,
             top_k=dense_candidate_k,
+            filters=self._vector_filters(processed.filters),
         )
         final_results = dense_results[: processed.top_k]
         trace.record_stage(
@@ -120,6 +129,7 @@ class SearchService:
                 processed.collection,
                 processed.normalized_query,
                 top_k=sparse_candidate_k,
+                filters=self._vector_filters(processed.filters),
             )
             trace.record_stage(
                 "sparse_retrieve",
@@ -170,6 +180,15 @@ class SearchService:
             results=final_results,
             retrieval_mode=retrieval_mode,
         )
+
+    def _vector_filters(self, filters: Metadata) -> Metadata | None:
+        if not filters:
+            return None
+        return {
+            key: value
+            for key, value in filters.items()
+            if key != "collection"
+        } or None
 
     def _candidate_top_k(
         self,

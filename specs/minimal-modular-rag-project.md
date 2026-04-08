@@ -1573,7 +1573,7 @@ ingestion trace 建议稳定记录：
 
 说明：
 
-- 这一阶段借鉴参考项目的 transform 思路，但不要求一开始就引入完整图像处理链路
+- 这一阶段采用渐进式 transform 扩展策略，不要求一开始就引入完整图像处理链路
 - M8 的重点是先定义 loader 与 transform 的扩展边界，再逐步把更多多模态处理能力接进去
 
 ### 里程碑 M9：Agent-Ready 扩展层
@@ -2151,6 +2151,611 @@ ingestion trace 建议稳定记录：
 - 最终说明包括：
   - 做了什么
   - 新 provider / chat CLI / quality checks 如何复用现有 service contract
+  - 当前 residual risks
+  - 验证结果
+
+### 里程碑 M11：真实后端与正式协议层
+
+目标
+
+- 把项目从“本地可运行的真实问答工程”推进到“更接近可集成系统”的阶段
+- 补齐当前最明显的真实能力短板：
+  - 真实向量库后端
+  - 真实 reranker
+  - 更明确的 query processing / filter contract
+  - 更正式的 MCP 协议实现
+- 为后续 Dashboard、HTTP 服务与更复杂的 Agent 调用提供稳定基础
+
+范围
+
+- 本轮重点做：
+  - 真实 vector store 后端
+  - 真实 reranker provider
+  - query processor 与基础 filters
+  - 正式 MCP stdio / protocol 层
+  - MCP tool contract 收口
+  - MCP E2E 验收
+- 本轮不做：
+  - Dashboard 六页面
+  - OCR / Vision LLM / 图片返回
+  - 多 Agent / planner / memory
+  - HTTP 服务
+
+#### M11.1：真实 Vector Store 后端
+
+目标
+
+- 把当前以 `memory` / `local_json` 为主的存储能力提升到真实可查询、可持久化、可过滤的向量库后端
+
+改动范围
+
+- `src/adapters/vector_store/chroma_store.py`
+- `src/adapters/vector_store/factory.py`
+- `src/core/settings.py`
+- `config/settings.yaml.example`
+- `README.md`
+
+要求
+
+- 继续实现 `BaseVectorStore`
+- `factory` 至少支持：
+  - `memory`
+  - `local_json`
+  - `chroma`
+- 支持最小能力：
+  - `upsert`
+  - `query`
+  - `list_records`
+  - `delete_doc`
+- `query` 必须返回稳定的 `RetrievalResult`
+- 本地持久化目录可配置
+- metadata 必须在 roundtrip 后保持稳定
+- 测试中不得依赖真实线上服务
+
+测试
+
+- `tests/integration/test_chroma_store_roundtrip.py`
+- `tests/unit/test_factories.py`
+- 至少覆盖：
+  - upsert → query roundtrip
+  - top_k 行为正确
+  - collection 之间隔离
+  - metadata 保留
+  - 重启实例后数据仍可读取
+
+验收命令
+
+- `./.venv/bin/ruff check src/adapters/vector_store tests/integration/test_chroma_store_roundtrip.py tests/unit/test_factories.py`
+- `./.venv/bin/pytest tests/integration/test_chroma_store_roundtrip.py tests/unit/test_factories.py`
+
+#### M11.2：真实 Reranker Provider
+
+目标
+
+- 补掉当前回答质量链路里仍然依赖 fake reranker 的短板
+
+改动范围
+
+- `src/adapters/reranker/llm_reranker.py`
+- `src/adapters/reranker/cross_encoder_reranker.py`
+- `src/adapters/reranker/factory.py`
+- `src/core/settings.py`
+- `config/settings.yaml.example`
+- `README.md`
+
+要求
+
+- 继续实现 `BaseReranker`
+- `factory` 至少支持：
+  - `fake`
+  - `llm`
+  - `cross_encoder`
+- LLM reranker：
+  - 输入为 query + candidate results
+  - 输出为稳定排序结果
+  - 输出格式不合法时抛出可读错误
+- Cross-encoder reranker：
+  - 支持 Top-M candidates 打分
+  - 支持超时/失败信号
+- `AnswerService` 必须保留稳定 fallback 行为
+- 测试中不得依赖真实外网或真实模型下载
+
+测试
+
+- `tests/unit/test_llm_reranker.py`
+- `tests/unit/test_cross_encoder_reranker.py`
+- `tests/integration/test_reranker_fallback.py`
+- 至少覆盖：
+  - factory 路由正确
+  - rerank 顺序稳定
+  - 失败/超时回退不破坏最终 answer
+  - provider 错误信息可读
+
+验收命令
+
+- `./.venv/bin/ruff check src/adapters/reranker tests/unit/test_llm_reranker.py tests/unit/test_cross_encoder_reranker.py tests/integration/test_reranker_fallback.py`
+- `./.venv/bin/pytest tests/unit/test_llm_reranker.py tests/unit/test_cross_encoder_reranker.py tests/integration/test_reranker_fallback.py`
+
+#### M11.3：Query Processor 与 Filters
+
+目标
+
+- 把当前较轻的 query 处理升级成更明确、可扩展的结构化检索入口
+
+改动范围
+
+- `src/retrieval/query_processor.py`
+- `src/core/types.py`
+- `src/application/search_service.py`
+- `src/interfaces/cli/query.py`
+- `README.md`
+
+要求
+
+- 新增稳定的 query processor 组件
+- 至少支持：
+  - query normalization
+  - keyword extraction
+  - 基础 filters 结构
+- filters 第一版至少预留：
+  - `collection`
+  - `doc_type`
+- `SearchService` 应消费处理后的 query contract，而不是内联继续膨胀逻辑
+- 不引入复杂 NLP 依赖
+- query processor 不得直接依赖 CLI / MCP
+
+测试
+
+- `tests/unit/test_query_processor.py`
+- 更新 `tests/integration/test_hybrid_search.py`
+- 至少覆盖：
+  - keywords 非空且稳定
+  - filters 结构存在
+  - `collection` / `doc_type` 能被正确传递
+  - hybrid / dense 路径不回归
+
+验收命令
+
+- `./.venv/bin/ruff check src/retrieval/query_processor.py src/application/search_service.py tests/unit/test_query_processor.py tests/integration/test_hybrid_search.py`
+- `./.venv/bin/pytest tests/unit/test_query_processor.py tests/integration/test_hybrid_search.py`
+
+#### M11.4：正式 MCP Stdio / Protocol 层
+
+目标
+
+- 把当前本地可测的 MCP-style server 推进为更正式的 stdio / protocol 实现
+
+改动范围
+
+- `src/interfaces/mcp/server.py`
+- `src/interfaces/mcp/protocol_handler.py`
+- `src/interfaces/mcp/models.py`
+- `README.md`
+
+要求
+
+- 支持核心 MCP/JSON-RPC 交互：
+  - `initialize`
+  - `tools/list`
+  - `tools/call`
+- `stdout` 只输出协议消息
+- 日志和调试信息必须走 `stderr`
+- 错误码映射必须清晰稳定
+- 不得把协议细节反塞回 application services
+
+测试
+
+- `tests/unit/test_protocol_handler.py`
+- 更新 `tests/integration/test_mcp_server.py`
+- 至少覆盖：
+  - initialize 返回 server info 与 capabilities
+  - tools/list 返回已注册 tool schema
+  - tools/call 正确路由
+  - 参数错误 / 未知方法 / 内部错误映射稳定
+
+验收命令
+
+- `./.venv/bin/ruff check src/interfaces/mcp tests/unit/test_protocol_handler.py tests/integration/test_mcp_server.py`
+- `./.venv/bin/pytest tests/unit/test_protocol_handler.py tests/integration/test_mcp_server.py`
+
+建议提交信息
+
+- `feat: implement formal mcp stdio protocol handling`
+
+#### M11.5：MCP Tool Contract 收口
+
+目标
+
+- 把 MCP 工具从“最小可用”推进到更稳定的知识检索接口层
+
+改动范围
+
+- `src/interfaces/mcp/tools/query_knowledge.py`
+- `src/interfaces/mcp/tools/list_collections.py`
+- `src/interfaces/mcp/tools/get_document_summary.py`
+- `src/interfaces/mcp/mappers.py`
+- `README.md`
+
+要求
+
+- `query` tool：
+  - 返回人类可读内容
+  - 返回稳定 `structuredContent`
+  - citation 至少包含：
+    - `source_path`
+    - `chunk_id`
+    - `score`
+    - `page`
+- 新增 `list_collections`
+- 新增 `get_document_summary`
+- 无结果与错误场景必须返回友好信息
+- 工具层不得复制 application service 的业务逻辑
+
+测试
+
+- `tests/unit/test_query_tool.py`
+- `tests/unit/test_list_collections.py`
+- `tests/unit/test_get_document_summary.py`
+- 更新 `tests/integration/test_mcp_server.py`
+- 至少覆盖：
+  - tool schema 正确
+  - 返回内容与 structuredContent 一致
+  - doc 不存在时错误稳定
+  - citations 结构稳定
+
+验收命令
+
+- `./.venv/bin/ruff check src/interfaces/mcp tests/unit/test_query_tool.py tests/unit/test_list_collections.py tests/unit/test_get_document_summary.py tests/integration/test_mcp_server.py`
+- `./.venv/bin/pytest tests/unit/test_query_tool.py tests/unit/test_list_collections.py tests/unit/test_get_document_summary.py tests/integration/test_mcp_server.py`
+
+#### M11.6：MCP E2E 验收
+
+目标
+
+- 不只验证本地函数调用，还要验证子进程级别的 MCP 交互闭环
+
+改动范围
+
+- `tests/e2e/test_mcp_client.py`
+- `README.md`
+
+要求
+
+- 以子进程方式启动 MCP server
+- 模拟最小 client 行为：
+  - initialize
+  - tools/list
+  - tools/call
+- 至少跑通一次真实 query tool
+- 失败时输出必须可定位
+- E2E 不得依赖外网
+
+测试
+
+- `tests/e2e/test_mcp_client.py`
+- 至少覆盖：
+  - server 能正常启动
+  - initialize 成功
+  - list tools 成功
+  - call query tool 成功
+  - 非法请求错误码稳定
+
+验收命令
+
+- `./.venv/bin/ruff check tests/e2e/test_mcp_client.py`
+- `./.venv/bin/pytest tests/e2e/test_mcp_client.py`
+
+约束
+
+- 不要在 M11 里同时做 Dashboard、HTTP、OCR 和多 Agent
+- 不要跳过真实后端能力直接先做可视化页面
+- 不要把 MCP 协议逻辑混入 application services
+- 每个子阶段都应可以单独验证、单独提交、单独回滚
+
+按照顺序执行
+
+完成前必须执行完整验证
+
+- `./.venv/bin/ruff check .`
+- `./.venv/bin/pytest`
+
+输出要求
+
+- 直接改代码，不要只给方案
+- 最终说明包括：
+  - 做了什么
+  - 真实向量库 / reranker / MCP protocol 如何复用当前 service contract
+  - 当前 residual risks
+  - 验证结果
+
+### 里程碑 M12：可视化管理与评估平台
+
+目标
+
+- 把项目从“可集成的本地 RAG / MCP 工程”推进到“可管理、可观察、可回归演示”的阶段
+- 在不破坏现有 application services 和 response contract 的前提下，补上：
+  - 本地 Dashboard
+  - 文档与数据浏览能力
+  - ingestion / query trace 可视化
+  - 更完整的评估入口与结果展示
+- 让项目具备更强的面试展示、调优排障和本地运维能力
+
+范围
+
+- 本轮重点做：
+  - Dashboard 基础架构
+  - 文档数据浏览与文档管理
+  - ingestion 管理页面
+  - ingestion / query trace 页面
+  - 评估面板与评估历史
+  - Dashboard E2E 冒烟与 README 使用说明
+- 本轮不做：
+  - HTTP API
+  - OCR / Vision LLM
+  - 多 Agent / planner / memory
+  - 生产级权限系统
+
+#### M12.1：Dashboard 基础架构与系统总览页
+
+目标
+
+- 搭建本地 Dashboard 的最小可扩展骨架，并提供系统总览页展示当前配置和数据状态
+
+改动范围
+
+- `src/observability/dashboard/app.py`
+- `src/observability/dashboard/pages/overview.py`
+- `src/observability/dashboard/services/config_service.py`
+- `scripts/start_dashboard.sh`
+- `README.md`
+
+要求
+
+- 使用本地可运行的 Web UI 方案，优先选择 Streamlit
+- 提供稳定的多页面导航结构
+- Overview 页面至少展示：
+  - 当前 loader / embedding / llm / reranker / vector_store provider
+  - 当前 collection 数量
+  - 当前 chunk / document 统计
+  - trace 文件位置与状态
+- `ConfigService` 负责读取 settings 和格式化展示数据
+- Dashboard 层不得直接复制 application 层逻辑
+
+测试
+
+- `tests/unit/test_dashboard_config_service.py`
+- 至少覆盖：
+  - settings 读取正确
+  - provider 卡片数据正确
+  - 缺失配置时错误可读
+
+验收命令
+
+- `./.venv/bin/ruff check src/observability/dashboard tests/unit/test_dashboard_config_service.py scripts/start_dashboard.sh`
+- `./.venv/bin/pytest tests/unit/test_dashboard_config_service.py`
+
+#### M12.2：数据浏览器与文档管理
+
+目标
+
+- 提供文档列表、chunk 详情、元数据浏览和删除操作，形成最小可管理的数据视图
+
+改动范围
+
+- `src/observability/dashboard/pages/data_browser.py`
+- `src/observability/dashboard/services/data_service.py`
+- `src/application/document_service.py`
+- `README.md`
+
+要求
+
+- 数据浏览页面至少支持：
+  - collection 切换
+  - 文档列表
+  - chunk 内容查看
+  - metadata JSON 展示
+- `DataService` 负责把 vector store / document service 的数据转成页面可消费结构
+- 删除入口必须复用现有 `DocumentService`
+- 页面层不得直接操作底层存储
+
+测试
+
+- `tests/unit/test_dashboard_data_service.py`
+- 更新 `tests/integration/test_document_lifecycle.py`
+- 至少覆盖：
+  - 文档列表正确
+  - chunk 详情正确
+  - metadata 展示所需字段齐全
+  - 删除后页面数据同步变化
+
+验收命令
+
+- `./.venv/bin/ruff check src/observability/dashboard tests/unit/test_dashboard_data_service.py tests/integration/test_document_lifecycle.py`
+- `./.venv/bin/pytest tests/unit/test_dashboard_data_service.py tests/integration/test_document_lifecycle.py`
+
+#### M12.3：Ingestion 管理页与运行控制
+
+目标
+
+- 让用户可以从 Dashboard 里触发 preview / ingest，并看到运行进度和结果
+
+改动范围
+
+- `src/observability/dashboard/pages/ingestion_manager.py`
+- `src/observability/dashboard/services/ingestion_service.py`
+- `src/application/ingest_service.py`
+- `scripts/start_dashboard.sh`
+
+要求
+
+- 页面至少支持：
+  - 选择本地路径
+  - 运行 `preview`
+  - 运行 `ingest`
+  - 查看结果摘要
+- 优先复用现有：
+  - `IngestService`
+  - `mrag-ingest-preview` 对应逻辑
+- 若需要进度展示，应复用或扩展现有 trace / progress 信息，而不是重写一套私有状态管理
+- 对 PDF 质量状态要有可见反馈
+
+测试
+
+- `tests/unit/test_dashboard_ingestion_service.py`
+- 更新 `tests/integration/test_pdf_preview.py`
+- 至少覆盖：
+  - preview 结果可正确映射
+  - ingest 执行后返回摘要
+  - 质量 warning 可见
+
+验收命令
+
+- `./.venv/bin/ruff check src/observability/dashboard tests/unit/test_dashboard_ingestion_service.py tests/integration/test_pdf_preview.py`
+- `./.venv/bin/pytest tests/unit/test_dashboard_ingestion_service.py tests/integration/test_pdf_preview.py`
+
+#### M12.4：Ingestion / Query Trace 页面
+
+目标
+
+- 把已有的 JSONL trace 从 CLI 工具扩展到图形化页面，方便定位 retrieval 和 ingestion 问题
+
+改动范围
+
+- `src/observability/dashboard/pages/ingestion_traces.py`
+- `src/observability/dashboard/pages/query_traces.py`
+- `src/observability/dashboard/services/trace_service.py`
+- `src/observability/trace_reader.py`
+
+要求
+
+- 页面至少支持：
+  - 历史列表
+  - 按类型筛选
+  - 单条 trace 详情
+  - 阶段耗时展示
+- query trace 页面至少展示：
+  - dense / sparse / rrf / rerank 阶段
+  - 候选数量与最终结果数量
+- ingestion trace 页面至少展示：
+  - load / transform / split / embed / store 阶段
+  - PDF 质量指标
+- `TraceService` 应复用 `TraceReader`，不要新造一套 trace 解析器
+
+测试
+
+- `tests/unit/test_dashboard_trace_service.py`
+- 更新 `tests/integration/test_trace_explorer.py`
+- 至少覆盖：
+  - trace 列表读取正确
+  - 单条 trace 详情读取正确
+  - 阶段字段可被页面层消费
+
+验收命令
+
+- `./.venv/bin/ruff check src/observability/dashboard src/observability/trace_reader.py tests/unit/test_dashboard_trace_service.py tests/integration/test_trace_explorer.py`
+- `./.venv/bin/pytest tests/unit/test_dashboard_trace_service.py tests/integration/test_trace_explorer.py`
+
+#### M12.5：评估面板与评估历史
+
+目标
+
+- 把当前已有的 deterministic evaluation 从 CLI 扩展成图形化评估入口与结果面板
+
+改动范围
+
+- `src/observability/dashboard/pages/evaluation_panel.py`
+- `src/observability/dashboard/services/evaluation_service.py`
+- `src/interfaces/cli/eval.py`
+- `README.md`
+
+要求
+
+- 页面至少支持：
+  - 选择 retrieval / answer / all
+  - 选择 fixtures
+  - 运行评估
+  - 展示 aggregate 指标
+  - 展示 case 明细
+- 第一版优先复用现有：
+  - `RetrievalEvalRunner`
+  - `AnswerEvalRunner`
+- 如需历史记录，可先存 JSON 报告到本地文件，不引入数据库
+- 评估页面不得直接调用底层 provider，而应通过现有 service / runner 装配
+
+测试
+
+- `tests/unit/test_dashboard_evaluation_service.py`
+- 更新 `tests/integration/test_eval_regression.py`
+- 至少覆盖：
+  - retrieval / answer / all 模式正确
+  - 报告字段正确
+  - fixtures 错误时提示稳定
+
+验收命令
+
+- `./.venv/bin/ruff check src/observability/dashboard src/interfaces/cli/eval.py tests/unit/test_dashboard_evaluation_service.py tests/integration/test_eval_regression.py`
+- `./.venv/bin/pytest tests/unit/test_dashboard_evaluation_service.py tests/integration/test_eval_regression.py`
+
+#### M12.6：Dashboard E2E 冒烟与文档收口
+
+目标
+
+- 确保 Dashboard 至少具备“能启动、能打开、能展示基础页面”的可复现能力
+
+改动范围
+
+- `tests/e2e/test_dashboard_smoke.py`
+- `README.md`
+- `scripts/start_dashboard.sh`
+
+要求
+
+- 至少对以下页面做冒烟验证：
+  - overview
+  - data browser
+  - ingestion manager
+  - ingestion traces
+  - query traces
+  - evaluation panel
+- 文档至少补齐：
+  - 启动命令
+  - 页面说明
+  - 典型工作流
+- E2E 不依赖外网
+
+测试
+
+- `tests/e2e/test_dashboard_smoke.py`
+- 至少覆盖：
+  - app 能启动
+  - 页面无 Python 异常
+  - 基础数据渲染成功
+
+验收命令
+
+- `./.venv/bin/ruff check tests/e2e/test_dashboard_smoke.py scripts/start_dashboard.sh README.md`
+- `./.venv/bin/pytest tests/e2e/test_dashboard_smoke.py`
+
+约束
+
+- 不要在 M12 里同时做 HTTP、OCR、Vision LLM 或多 Agent
+- 页面层必须复用现有 service / trace / evaluation contract
+- 不要把 Dashboard 状态管理逻辑扩散回 application 层
+- 每个子阶段都应可以单独验证、单独提交、单独回滚
+
+按照顺序执行
+
+完成前必须执行完整验证
+
+- `./.venv/bin/ruff check .`
+- `./.venv/bin/pytest`
+
+输出要求
+
+- 直接改代码，不要只给方案
+- 最终说明包括：
+  - 做了什么
+  - Dashboard / evaluation 如何复用现有 service 和 trace contract
   - 当前 residual risks
   - 验证结果
 

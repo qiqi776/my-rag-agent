@@ -29,6 +29,10 @@ QUERY_KNOWLEDGE_TOOL = MCPTool(
                 "description": "Retrieval mode override.",
                 "enum": ["dense", "hybrid"],
             },
+            "doc_type": {
+                "type": "string",
+                "description": "Optional document type filter, for example 'pdf' or 'text'.",
+            },
         },
         "required": ["query"],
     },
@@ -78,8 +82,15 @@ class QueryKnowledgeTool:
             collection=collection,
             top_k=_optional_top_k(arguments),
             mode=mode,
+            filters=self._filters(arguments),
         )
         return map_search_output(output)
+
+    def _filters(self, arguments: dict[str, Any]) -> dict[str, Any] | None:
+        doc_type = _optional_string(arguments, "doc_type")
+        if doc_type is None:
+            return None
+        return {"doc_type": doc_type}
 
 
 def register_query_knowledge_tool(server: Any, dependencies: MCPDependencies) -> None:

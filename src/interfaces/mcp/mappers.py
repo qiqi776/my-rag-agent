@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.application.document_service import DeleteDocumentResult, DocumentSummary
+from src.application.document_service import DeleteDocumentResult, DocumentDetail, DocumentSummary
 from src.interfaces.mcp.models import MCPTextContent, MCPToolResult
 from src.response.response_builder import SearchOutput
 
@@ -110,6 +110,65 @@ def map_document_list(
             "count": len(documents),
             "documents": [document.to_dict() for document in documents],
         },
+    )
+
+
+def map_collection_list(collections: list[str]) -> MCPToolResult:
+    """Convert collection names into a stable MCP payload."""
+
+    if not collections:
+        return MCPToolResult(
+            content=[MCPTextContent("## No Collections Found")],
+            structured_content={
+                "kind": "collection_list",
+                "count": 0,
+                "collections": [],
+            },
+        )
+
+    lines = ["## Collections", "", f"Count: {len(collections)}", ""]
+    lines.extend(f"- `{collection}`" for collection in collections)
+    return MCPToolResult(
+        content=[MCPTextContent("\n".join(lines))],
+        structured_content={
+            "kind": "collection_list",
+            "count": len(collections),
+            "collections": collections,
+        },
+    )
+
+
+def map_document_detail(detail: DocumentDetail | None) -> MCPToolResult:
+    """Convert a document summary/detail payload into MCP output."""
+
+    if detail is None:
+        return MCPToolResult(
+            content=[MCPTextContent("## Document Not Found")],
+            structured_content={
+                "kind": "document_detail",
+                "found": False,
+            },
+        )
+
+    lines = [
+        "## Document Summary",
+        "",
+        f"Document: `{detail.doc_id}`",
+        f"Collection: `{detail.collection}`",
+        f"Source: `{detail.source_path}`",
+        f"Chunks: {detail.chunk_count}",
+    ]
+    if detail.metadata.get("page_count") is not None:
+        lines.append(f"Pages: {detail.metadata['page_count']}")
+    if detail.preview:
+        lines.extend(["", "### Preview", "", _snippet(detail.preview, max_length=300)])
+
+    payload = detail.to_dict()
+    payload["kind"] = "document_detail"
+    payload["found"] = True
+    return MCPToolResult(
+        content=[MCPTextContent("\n".join(lines))],
+        structured_content=payload,
     )
 
 
