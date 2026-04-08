@@ -81,7 +81,11 @@ class SearchService:
         )
 
         dense_started = time.monotonic()
-        dense_candidate_k = max(processed.top_k, self.settings.retrieval.dense_top_k)
+        dense_candidate_k = self._candidate_top_k(
+            processed.top_k,
+            self.settings.retrieval.dense_top_k,
+            self.settings.retrieval.dense_candidate_multiplier,
+        )
         dense_results = self.vector_store.query(
             processed.collection,
             query_vector=query_vector,
@@ -94,6 +98,8 @@ class SearchService:
                 "candidate_result_count": len(dense_results),
                 "final_result_count": len(final_results) if retrieval_mode == "dense" else None,
                 "candidate_top_k": dense_candidate_k,
+                "requested_top_k": processed.top_k,
+                "candidate_multiplier": self.settings.retrieval.dense_candidate_multiplier,
             },
             elapsed_ms=(time.monotonic() - dense_started) * 1000.0,
         )
@@ -105,7 +111,11 @@ class SearchService:
                 )
 
             sparse_started = time.monotonic()
-            sparse_candidate_k = max(processed.top_k, self.settings.retrieval.sparse_top_k)
+            sparse_candidate_k = self._candidate_top_k(
+                processed.top_k,
+                self.settings.retrieval.sparse_top_k,
+                self.settings.retrieval.sparse_candidate_multiplier,
+            )
             sparse_results = self.sparse_retriever.retrieve(
                 processed.collection,
                 processed.normalized_query,
@@ -116,6 +126,8 @@ class SearchService:
                 {
                     "candidate_result_count": len(sparse_results),
                     "candidate_top_k": sparse_candidate_k,
+                    "requested_top_k": processed.top_k,
+                    "candidate_multiplier": self.settings.retrieval.sparse_candidate_multiplier,
                 },
                 elapsed_ms=(time.monotonic() - sparse_started) * 1000.0,
             )
@@ -158,3 +170,16 @@ class SearchService:
             results=final_results,
             retrieval_mode=retrieval_mode,
         )
+
+    def _candidate_top_k(
+        self,
+        requested_top_k: int,
+        configured_top_k: int,
+        multiplier: int,
+    ) -> int:
+        scaled_top_k = requested_top_k * multiplier
+        capped_top_k = min(
+            max(requested_top_k, configured_top_k, scaled_top_k),
+            self.settings.retrieval.max_candidate_top_k,
+        )
+        return max(requested_top_k, capped_top_k)

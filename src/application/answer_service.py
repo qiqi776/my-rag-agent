@@ -44,12 +44,14 @@ class AnswerService:
         """Execute retrieve -> rerank -> build answer."""
 
         context_limit = top_k or self.settings.generation.max_context_results
+        candidate_limit = max(context_limit, self.settings.generation.candidate_results)
         trace = TraceContext(
             trace_type="answer",
             metadata={
                 "query": query,
                 "collection": collection or self.settings.ingestion.default_collection,
                 "top_k": context_limit,
+                "candidate_results": candidate_limit,
                 "mode": mode or self.settings.retrieval.mode,
             },
         )
@@ -58,7 +60,7 @@ class AnswerService:
         search_output = self.search_service.search(
             query=query,
             collection=collection,
-            top_k=max(context_limit, self.settings.generation.max_context_results),
+            top_k=candidate_limit,
             mode=mode,
         )
         trace.record_stage(
@@ -66,33 +68,38 @@ class AnswerService:
             {
                 "result_count": search_output.result_count,
                 "retrieval_mode": search_output.retrieval_mode,
+                "candidate_results": candidate_limit,
             },
             elapsed_ms=(time.monotonic() - retrieve_started) * 1000.0,
         )
 
         rerank_started = time.monotonic()
-        supporting_results = self.reranker.rerank(
+        reranked_results = self.reranker.rerank(
             search_output.normalized_query,
             search_output.results,
-            top_k=context_limit,
+            top_k=candidate_limit,
         )
+        supporting_results = reranked_results[:context_limit]
         trace.record_stage(
             "rerank",
             {
                 "input_count": search_output.result_count,
-                "result_count": len(supporting_results),
+                "candidate_result_count": len(reranked_results),
+                "selected_result_count": len(supporting_results),
                 "provider": self.reranker.provider,
             },
             elapsed_ms=(time.monotonic() - rerank_started) * 1000.0,
         )
 
         context_started = time.monotonic()
-        contexts = [result.text for result in supporting_results]
+        contexts, context_char_count, truncated_contexts = self._assemble_contexts(supporting_results)
         trace.record_stage(
             "assemble_context",
             {
                 "context_count": len(contexts),
-                "char_count": sum(len(text) for text in contexts),
+                "char_count": context_char_count,
+                "max_context_chars": self.settings.generation.max_context_chars,
+                "truncated_contexts": truncated_contexts,
             },
             elapsed_ms=(time.monotonic() - context_started) * 1000.0,
         )
@@ -117,3 +124,33 @@ class AnswerService:
             self.trace_store.append(trace)
 
         return self.answer_builder.build(search_output, supporting_results, answer)
+
+    def _assemble_contexts(self, supporting_results: list) -> tuple[list[str], int, int]:
+        max_context_chars = self.settings.generation.max_context_chars
+        contexts: list[str] = []
+        used_chars = 0
+        truncated_contexts = 0
+
+        for result in supporting_results:
+            normalized_text = " ".join(result.text.split()).strip()
+            if not normalized_text:
+                continue
+
+            remaining_chars = max_context_chars - used_chars
+            if remaining_chars <= 0:
+                truncated_contexts += 1
+                break
+
+            if len(normalized_text) > remaining_chars:
+                if not contexts:
+                    snippet = normalized_text[:remaining_chars].rstrip()
+                    if snippet:
+                        contexts.append(snippet)
+                        used_chars += len(snippet)
+                truncated_contexts += 1
+                break
+
+            contexts.append(normalized_text)
+            used_chars += len(normalized_text)
+
+        return contexts, used_chars, truncated_contexts

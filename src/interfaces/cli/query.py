@@ -37,6 +37,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _display_source_path(source_path: str) -> str:
+    name = Path(source_path).name
+    return name or source_path
+
+
+def _snippet(text: str, max_chars: int = 140) -> str:
+    normalized = " ".join(text.split()).strip()
+    if len(normalized) <= max_chars:
+        return normalized
+    return f"{normalized[: max_chars - 3].rstrip()}..."
+
+
 def main() -> int:
     args = build_parser().parse_args()
     try:
@@ -70,19 +82,22 @@ def main() -> int:
         return 0
 
     print(
-        f"[OK] mode={response.retrieval_mode} "
-        f"query='{response.normalized_query}' "
-        f"collection={response.collection} "
-        f"returned={response.result_count}"
+        f"[OK] Found {response.result_count} result(s) for "
+        f"'{response.normalized_query}' in collection={response.collection} "
+        f"using mode={response.retrieval_mode}"
     )
+    print("")
     for result in response.results:
-        snippet = result.text.replace("\n", " ")[:120]
-        page_suffix = f" page={result.page}" if result.page is not None else ""
-        print(
-            f"{result.rank:02d}. score={result.score:.4f} chunk_id={result.chunk_id} "
-            f"source={result.source_path}{page_suffix}"
-        )
-        print(f"    {snippet}")
+        snippet = _snippet(result.text)
+        metadata_parts = [
+            f"source={_display_source_path(result.source_path)}",
+            f"score={result.score:.4f}",
+            f"chunk_id={result.chunk_id}",
+        ]
+        if result.page is not None:
+            metadata_parts.insert(1, f"page={result.page}")
+        print(f"{result.rank:02d}. {snippet}")
+        print(f"    {' '.join(metadata_parts)}")
     return 0
 
 

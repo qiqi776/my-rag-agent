@@ -7,7 +7,7 @@ import importlib
 import importlib.util
 import re
 import zlib
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +51,20 @@ class PDFPage:
     text: str
 
 
+@dataclass(frozen=True, slots=True)
+class PDFQuality:
+    non_empty_page_ratio: float
+    printable_char_ratio: float
+    alnum_ratio: float
+    suspicious_symbol_ratio: float
+    latin_extended_ratio: float
+    quality_status: str
+    quality_warnings: list[str]
+
+    def to_metadata(self) -> Metadata:
+        return asdict(self)
+
+
 class PdfLoader(BaseLoader):
     """Load a PDF into a normalized document with page-level metadata."""
 
@@ -71,6 +85,7 @@ class PdfLoader(BaseLoader):
         doc_id = hashlib.sha256(raw).hexdigest()
         pages = self._extract_pages(file_path, raw)
         combined_text = "\n\n".join(page.text for page in pages if page.text.strip()).strip()
+        quality = self._assess_quality(pages)
 
         metadata: Metadata = {
             "source_path": str(file_path),
@@ -83,6 +98,7 @@ class PdfLoader(BaseLoader):
                 }
                 for page in pages
             ],
+            **quality.to_metadata(),
         }
         title = self._title_from_pages(pages)
         if title:
@@ -166,6 +182,61 @@ class PdfLoader(BaseLoader):
         if fallback_text:
             return [PDFPage(page=1, text="\n".join(fallback_text).strip())]
         return []
+
+    def _assess_quality(self, pages: list[PDFPage]) -> PDFQuality:
+        page_count = max(len(pages), 1)
+        non_empty_pages = sum(1 for page in pages if page.text.strip())
+        combined_text = "\n".join(page.text for page in pages if page.text).strip()
+        visible_chars = [char for char in combined_text if not char.isspace()]
+        visible_count = len(visible_chars)
+
+        printable_count = sum(1 for char in visible_chars if char.isprintable())
+        alnum_count = sum(1 for char in visible_chars if char.isalnum())
+        suspicious_count = sum(1 for char in visible_chars if self._is_suspicious_symbol(char))
+        latin_extended_count = sum(
+            1 for char in visible_chars if self._is_latin_extended_letter(char)
+        )
+
+        non_empty_page_ratio = self._safe_ratio(non_empty_pages, page_count)
+        printable_char_ratio = self._safe_ratio(printable_count, visible_count)
+        alnum_ratio = self._safe_ratio(alnum_count, visible_count)
+        suspicious_symbol_ratio = self._safe_ratio(suspicious_count, visible_count)
+        latin_extended_ratio = self._safe_ratio(latin_extended_count, visible_count)
+
+        warnings: list[str] = []
+        if non_empty_page_ratio < 0.80:
+            warnings.append("high empty-page ratio")
+        if printable_char_ratio < 0.85:
+            warnings.append("low printable-char ratio")
+        if alnum_ratio < 0.45:
+            warnings.append("low alnum ratio")
+        if suspicious_symbol_ratio > 0.15:
+            warnings.append("high suspicious-symbol ratio")
+        if latin_extended_ratio > 0.08:
+            warnings.append("high latin-extended ratio")
+
+        if (
+            non_empty_page_ratio == 0.0
+            or printable_char_ratio < 0.65
+            or alnum_ratio < 0.20
+            or suspicious_symbol_ratio > 0.35
+            or latin_extended_ratio > 0.20
+        ):
+            quality_status = "bad"
+        elif warnings:
+            quality_status = "warning"
+        else:
+            quality_status = "good"
+
+        return PDFQuality(
+            non_empty_page_ratio=round(non_empty_page_ratio, 4),
+            printable_char_ratio=round(printable_char_ratio, 4),
+            alnum_ratio=round(alnum_ratio, 4),
+            suspicious_symbol_ratio=round(suspicious_symbol_ratio, 4),
+            latin_extended_ratio=round(latin_extended_ratio, 4),
+            quality_status=quality_status,
+            quality_warnings=warnings,
+        )
 
     def _content_object_ids(self, page_body: bytes) -> list[int]:
         match = _CONTENTS_PATTERN.search(page_body)
@@ -282,3 +353,25 @@ class PdfLoader(BaseLoader):
                 if candidate:
                     return candidate
         return None
+
+    def _safe_ratio(self, numerator: int, denominator: int) -> float:
+        if denominator <= 0:
+            return 0.0
+        return numerator / denominator
+
+    def _is_suspicious_symbol(self, char: str) -> bool:
+        if char.isalnum():
+            return False
+        if char in _COMMON_PUNCTUATION:
+            return False
+        return not char.isspace()
+
+    def _is_latin_extended_letter(self, char: str) -> bool:
+        codepoint = ord(char)
+        return 0x00C0 <= codepoint <= 0x024F
+
+
+_COMMON_PUNCTUATION = frozenset(
+    ".,;:!?\"'`()[]{}<>/\\|@#$%^&*-_=+~`"
+    "，。；：！？、“”‘’（）【】《》〈〉·…—"
+)

@@ -57,18 +57,23 @@ class AnswerBuilder:
         supporting_results: list[SearchResultItem],
         answer: str,
     ) -> AnswerOutput:
-        citations = [
-            AnswerCitation(
-                chunk_id=result.chunk_id,
-                doc_id=result.doc_id,
-                source_path=result.source_path,
-                collection=result.collection,
-                chunk_index=result.chunk_index,
-                score=result.score,
-                page=result.page,
+        citations: list[AnswerCitation] = []
+        seen_chunk_ids: set[str] = set()
+        for result in supporting_results:
+            if result.chunk_id in seen_chunk_ids:
+                continue
+            seen_chunk_ids.add(result.chunk_id)
+            citations.append(
+                AnswerCitation(
+                    chunk_id=result.chunk_id,
+                    doc_id=result.doc_id,
+                    source_path=result.source_path,
+                    collection=result.collection,
+                    chunk_index=result.chunk_index,
+                    score=result.score,
+                    page=result.page,
+                )
             )
-            for result in supporting_results
-        ]
         return AnswerOutput(
             query=search_output.query,
             normalized_query=search_output.normalized_query,

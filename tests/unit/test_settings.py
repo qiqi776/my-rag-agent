@@ -29,9 +29,14 @@ retrieval:
   mode: "{retrieval_mode}"
   dense_top_k: 5
   sparse_top_k: 5
+  dense_candidate_multiplier: 3
+  sparse_candidate_multiplier: 4
+  max_candidate_top_k: 12
   rrf_k: 60
 generation:
   max_context_results: 3
+  candidate_results: 6
+  max_context_chars: 1200
   max_answer_chars: 400
 adapters:
   loader:
@@ -67,10 +72,15 @@ def test_load_settings_success(tmp_path: Path) -> None:
     assert settings.adapters.embedding.dimensions == 16
     assert settings.retrieval.mode == "dense"
     assert settings.retrieval.sparse_top_k == 5
+    assert settings.retrieval.dense_candidate_multiplier == 3
+    assert settings.retrieval.sparse_candidate_multiplier == 4
+    assert settings.retrieval.max_candidate_top_k == 12
     assert settings.retrieval.rrf_k == 60
     assert settings.adapters.llm.provider == "fake"
     assert settings.adapters.reranker.provider == "fake"
     assert settings.generation.max_context_results == 3
+    assert settings.generation.candidate_results == 6
+    assert settings.generation.max_context_chars == 1200
     assert settings.generation.max_answer_chars == 400
     assert settings.ingestion.transforms.enabled is False
     assert settings.ingestion.transforms.order == [

@@ -11,8 +11,9 @@ from src.application.ingest_service import IngestService
 from src.application.search_service import SearchService
 from src.core.errors import EmptyQueryError
 from src.core.settings import load_settings
-from src.core.types import ChunkRecord
+from src.core.types import ChunkRecord, RetrievalResult
 from src.observability.trace_store import TraceStore
+from src.retrieval.sparse_retriever import SparseRetriever
 
 
 def _write_settings(path: Path, storage_path: Path, trace_path: Path) -> None:
@@ -30,6 +31,10 @@ ingestion:
     - ".md"
 retrieval:
   dense_top_k: 3
+  sparse_top_k: 3
+  dense_candidate_multiplier: 4
+  sparse_candidate_multiplier: 5
+  max_candidate_top_k: 9
 adapters:
   loader:
     provider: "text"
@@ -46,6 +51,25 @@ observability:
 """.strip(),
         encoding="utf-8",
     )
+
+
+class RecordingSparseRetriever(SparseRetriever):
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def retrieve(self, collection: str, query: str, top_k: int) -> list[RetrievalResult]:
+        self.calls.append({"collection": collection, "query": query, "top_k": top_k})
+        return []
+
+
+class RecordingVectorStore(InMemoryVectorStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.query_top_ks: list[int] = []
+
+    def query(self, collection: str, query_vector: list[float], top_k: int) -> list[RetrievalResult]:
+        self.query_top_ks.append(top_k)
+        return super().query(collection, query_vector, top_k)
 
 
 @pytest.mark.unit
@@ -108,6 +132,53 @@ def test_search_service_returns_stable_response_output(tmp_path: Path) -> None:
     assert response.result_count == 1
     assert response.results[0].rank == 1
     assert response.citations[0].chunk_id == "chunk-1"
+
+
+@pytest.mark.unit
+def test_search_service_uses_candidate_top_k_boundaries_for_hybrid_mode(tmp_path: Path) -> None:
+    config_path = tmp_path / "settings.yaml"
+    storage_path = tmp_path / "store.json"
+    trace_path = tmp_path / "trace.jsonl"
+    _write_settings(config_path, storage_path, trace_path)
+    settings = load_settings(config_path)
+
+    store = RecordingVectorStore()
+    store.upsert(
+        "knowledge",
+        [
+            ChunkRecord(
+                id="chunk-1",
+                doc_id="doc-1",
+                text="semantic embeddings support retrieval",
+                embedding=[1.0] * settings.adapters.embedding.dimensions,
+                metadata={
+                    "source_path": str((tmp_path / "doc.txt").resolve()),
+                    "collection": "knowledge",
+                    "chunk_index": 0,
+                },
+            )
+        ],
+    )
+    sparse_retriever = RecordingSparseRetriever()
+    service = SearchService(
+        settings=settings,
+        embedding=FakeEmbedding(settings.adapters.embedding.dimensions),
+        vector_store=store,
+        sparse_retriever=sparse_retriever,
+        trace_store=TraceStore(trace_path),
+    )
+
+    response = service.search("semantic embeddings", collection="knowledge", top_k=2, mode="hybrid")
+
+    assert response.results
+    assert store.query_top_ks == [8]
+    assert sparse_retriever.calls == [
+        {
+            "collection": "knowledge",
+            "query": "semantic embeddings",
+            "top_k": 9,
+        }
+    ]
 
 
 @pytest.mark.unit

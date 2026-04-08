@@ -33,13 +33,18 @@ ingestion:
 
 retrieval:
   mode: "dense"
-  dense_top_k: 5
-  sparse_top_k: 5
+  dense_top_k: 4
+  sparse_top_k: 6
+  dense_candidate_multiplier: 3
+  sparse_candidate_multiplier: 4
+  max_candidate_top_k: 12
   rrf_k: 60
 
 generation:
   max_context_results: 3
-  max_answer_chars: 400
+  candidate_results: 6
+  max_context_chars: 1200
+  max_answer_chars: 500
 
 adapters:
   loader:
@@ -47,13 +52,35 @@ adapters:
   embedding:
     provider: "fake"
     dimensions: 16
+    # For real providers, also configure:
+    # model: "text-embedding-3-small"
+    # api_key: "YOUR_API_KEY_HERE"
+    # base_url: "https://api.openai.com/v1"
+    # azure_endpoint: "https://YOUR_ENDPOINT.openai.azure.com/"
+    # deployment_name: "text-embedding-3-small"
+    # api_version: "2024-02-15-preview"
   vector_store:
     provider: "local_json"
     storage_path: "./data/db/vector_store.json"
   llm:
     provider: "fake"
+    # For real providers, also configure:
+    # model: "gpt-4o-mini"
+    # api_key: "YOUR_API_KEY_HERE"
+    # base_url: "https://api.openai.com/v1"
+    # azure_endpoint: "https://YOUR_ENDPOINT.openai.azure.com/"
+    # deployment_name: "gpt-4o-mini"
+    # api_version: "2024-02-15-preview"
+    # temperature: 0.0
   reranker:
     provider: "fake"
+    # For future real providers, also configure:
+    # model: "rerank-model-name"
+    # api_key: "YOUR_API_KEY_HERE"
+    # base_url: "https://api.openai.com/v1"
+    # azure_endpoint: "https://YOUR_ENDPOINT.openai.azure.com/"
+    # deployment_name: "rerank-model-name"
+    # api_version: "2024-02-15-preview"
 
 observability:
   trace_enabled: true

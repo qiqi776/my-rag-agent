@@ -98,8 +98,28 @@ def test_retrieval_eval_runner_reports_failure_when_expected_items_missing() -> 
 
 
 @pytest.mark.unit
+def test_retrieval_eval_runner_matches_expected_source_paths() -> None:
+    report = RetrievalEvalRunner(StubSearchService()).run(
+        [
+            RetrievalEvalCase(
+                name="source-path",
+                query="semantic embeddings",
+                collection="knowledge",
+                expected_source_paths=["python.txt"],
+            )
+        ]
+    )
+
+    assert report.passed_cases == 1
+    assert report.cases[0].matched_source_paths == ["python.txt"]
+
+
+@pytest.mark.unit
 def test_retrieval_eval_runner_rejects_case_without_expectations() -> None:
-    with pytest.raises(ValueError, match="must define expected_doc_ids or expected_chunk_ids"):
+    with pytest.raises(
+        ValueError,
+        match="must define expected_doc_ids, expected_chunk_ids, or expected_source_paths",
+    ):
         RetrievalEvalRunner(StubSearchService()).run(
             [
                 RetrievalEvalCase(

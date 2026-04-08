@@ -20,6 +20,8 @@ def test_pdf_loader_reads_single_page_pdf_and_extracts_title() -> None:
     assert document.metadata["title"] == "Minimal Modular RAG PDF"
     assert "PDF ingestion keeps source metadata." in document.text
     assert document.metadata["pages"][0]["page"] == 1
+    assert document.metadata["quality_status"] == "good"
+    assert document.metadata["quality_warnings"] == []
 
 
 @pytest.mark.unit
@@ -33,6 +35,7 @@ def test_pdf_loader_preserves_page_level_text() -> None:
     assert document.metadata["pages"][1]["page"] == 2
     assert "Second Page Details" in document.metadata["pages"][1]["text"]
     assert "page citations" in document.metadata["pages"][1]["text"].lower()
+    assert document.metadata["quality_status"] == "good"
 
 
 @pytest.mark.unit

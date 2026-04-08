@@ -91,7 +91,7 @@ def test_cli_mvp_ingest_query_and_document_lifecycle(
     )
     assert query_main() == 0
     query_output = capsys.readouterr().out
-    assert "returned=1" in query_output
+    assert "Found 1 result(s)" in query_output
     assert "python.txt" in query_output
 
     settings = load_settings(config_path)

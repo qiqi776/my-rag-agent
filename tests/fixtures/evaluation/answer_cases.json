@@ -13,6 +13,36 @@
       "expected_source_paths": [
         "python.txt"
       ]
+    },
+    {
+      "name": "virtual-memory-answer",
+      "query": "isolated address space",
+      "collection": "knowledge",
+      "top_k": 1,
+      "mode": "hybrid",
+      "expected_keywords": [
+        "virtual",
+        "memory",
+        "isolated"
+      ],
+      "expected_source_paths": [
+        "virtual_memory.txt"
+      ]
+    },
+    {
+      "name": "round-robin-answer",
+      "query": "fixed time slice scheduling",
+      "collection": "knowledge",
+      "top_k": 1,
+      "mode": "hybrid",
+      "expected_keywords": [
+        "round",
+        "robin",
+        "time"
+      ],
+      "expected_source_paths": [
+        "scheduler.txt"
+      ]
     }
   ]
 }

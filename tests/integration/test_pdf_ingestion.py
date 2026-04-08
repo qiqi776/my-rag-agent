@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from src.adapters.vector_store.in_memory_store import InMemoryVectorStore
 from src.application.ingest_service import IngestService
 from src.application.search_service import SearchService
 from src.core.settings import load_settings
+from src.observability.trace_store import TraceStore
 
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "ingestion"
 
@@ -85,3 +87,30 @@ def test_pdf_ingestion_keeps_page_metadata_searchable(tmp_path: Path) -> None:
     assert response.results[0].page == 2
     assert response.citations[0].page == 2
     assert response.results[0].metadata["page"] == 2
+
+
+@pytest.mark.integration
+def test_pdf_ingestion_records_quality_metrics_in_load_trace(tmp_path: Path) -> None:
+    config_path = tmp_path / "settings.yaml"
+    trace_path = tmp_path / "trace.jsonl"
+    _write_settings(config_path)
+    settings = load_settings(config_path)
+    vector_store = InMemoryVectorStore()
+    embedding = FakeEmbedding(settings.adapters.embedding.dimensions)
+
+    ingest_service = IngestService(
+        settings=settings,
+        loader=create_loader(settings),
+        embedding=embedding,
+        vector_store=vector_store,
+        trace_store=TraceStore(trace_path),
+    )
+
+    ingest_service.ingest_path(FIXTURE_DIR / "simple.pdf", collection="knowledge")
+
+    trace_payload = json.loads(trace_path.read_text(encoding="utf-8").splitlines()[0])
+    load_stage = next(stage for stage in trace_payload["stages"] if stage["stage"] == "load")
+
+    assert load_stage["data"]["quality_status"] == "good"
+    assert load_stage["data"]["non_empty_page_ratio"] == 1.0
+    assert load_stage["data"]["printable_char_ratio"] == 1.0

@@ -40,6 +40,9 @@ def load_retrieval_cases(path: str | Path) -> list[RetrievalEvalCase]:
                 mode=str(raw["mode"]) if raw.get("mode") is not None else None,
                 expected_doc_ids=[str(item) for item in raw.get("expected_doc_ids", [])],
                 expected_chunk_ids=[str(item) for item in raw.get("expected_chunk_ids", [])],
+                expected_source_paths=[
+                    str(item) for item in raw.get("expected_source_paths", [])
+                ],
             )
         )
     return cases

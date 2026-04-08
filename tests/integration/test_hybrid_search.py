@@ -37,6 +37,9 @@ retrieval:
   mode: "{retrieval_mode}"
   dense_top_k: 3
   sparse_top_k: 3
+  dense_candidate_multiplier: 3
+  sparse_candidate_multiplier: 4
+  max_candidate_top_k: 10
   rrf_k: 60
 adapters:
   loader:
@@ -112,6 +115,8 @@ def test_hybrid_search_runs_sparse_retrieval_and_rrf_fusion(tmp_path: Path) -> N
         "sparse_retrieve",
         "rrf_fuse",
     ]
+    assert query_trace["stages"][1]["data"]["candidate_top_k"] == 6
+    assert query_trace["stages"][2]["data"]["candidate_top_k"] == 8
 
 
 @pytest.mark.integration

@@ -9,6 +9,7 @@ description = "Minimal modular RAG project scaffold"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "openai>=1.0",
     "pyyaml>=6.0",
 ]
 
@@ -21,6 +22,7 @@ dev = [
 
 [project.scripts]
 mrag-ingest = "src.interfaces.cli.ingest:main"
+mrag-ingest-preview = "src.interfaces.cli.ingest_preview:main"
 mrag-query = "src.interfaces.cli.query:main"
 mrag-docs = "src.interfaces.cli.documents:main"
 mrag-mcp = "src.interfaces.mcp.server:main"
@@ -28,6 +30,7 @@ mrag-answer = "src.interfaces.cli.answer:main"
 mrag-traces = "src.interfaces.cli.traces:main"
 mrag-eval = "src.interfaces.cli.eval:main"
 mrag-agent = "src.interfaces.cli.agent:main"
+mrag-chat = "src.interfaces.cli.chat:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

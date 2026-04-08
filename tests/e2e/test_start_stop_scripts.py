@@ -42,6 +42,8 @@ def test_start_script_reads_existing_docs_directory_and_stop_keeps_it(tmp_path: 
     assert (runtime_dir / "session.env").exists()
     assert not (docs_dir / "getting-started.txt").exists()
     assert str(source_file) in start.stdout
+    assert "Previewed 1 document(s)." in start.stdout
+    assert "src.interfaces.cli.chat" in start.stdout
     assert "Demo environment ready" in start.stdout
 
     stop = subprocess.run(
@@ -91,6 +93,7 @@ def test_start_script_creates_missing_docs_directory(tmp_path: Path) -> None:
     assert (docs_dir / "getting-started.txt").exists()
     assert (runtime_dir / "store.json").exists()
     assert "Created docs directory" in start.stdout
+    assert "Previewed 1 document(s)." in start.stdout
 
     stop = subprocess.run(
         [
@@ -147,9 +150,12 @@ def test_start_script_switches_to_pdf_mode_for_pdf_documents(tmp_path: Path) -> 
     assert start.returncode == 0, start.stderr
     assert 'loader="pdf"' not in start.stdout
     assert "loader=pdf" in start.stdout
+    assert "Previewed 1 document(s)." in start.stdout
     config_text = (runtime_dir / "settings.yaml").read_text(encoding="utf-8")
     assert 'provider: "pdf"' in config_text
     assert '- ".pdf"' in config_text
+    assert "dense_candidate_multiplier: 3" in config_text
+    assert "candidate_results: 6" in config_text
 
     documents = subprocess.run(
         [

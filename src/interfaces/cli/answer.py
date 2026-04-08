@@ -36,6 +36,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _display_source_path(source_path: str) -> str:
+    name = Path(source_path).name
+    return name or source_path
+
+
 def main() -> int:
     args = build_parser().parse_args()
     try:
@@ -71,21 +76,25 @@ def main() -> int:
         return 1
 
     print(
-        f"[OK] mode={output.retrieval_mode} "
-        f"query='{output.normalized_query}' "
-        f"collection={output.collection} "
-        f"supporting={len(output.supporting_results)}"
+        f"[OK] Answer ready for '{output.normalized_query}' in collection={output.collection} "
+        f"using mode={output.retrieval_mode}"
     )
+    print(f"Supporting results: {len(output.supporting_results)}")
+    print("")
+    print("Answer:")
     print(output.answer)
     if output.citations:
         print("")
         print("Citations:")
         for index, citation in enumerate(output.citations, start=1):
-            page_suffix = f" page={citation.page}" if citation.page is not None else ""
+            details = [f"source={_display_source_path(citation.source_path)}"]
+            if citation.page is not None:
+                details.append(f"page={citation.page}")
+            details.append(f"score={citation.score:.4f}")
             print(
-                f"{index:02d}. chunk_id={citation.chunk_id} "
-                f"source={citation.source_path}{page_suffix} score={citation.score:.4f}"
+                f"{index:02d}. {' '.join(details)}"
             )
+            print(f"    chunk_id={citation.chunk_id}")
     return 0
 
 

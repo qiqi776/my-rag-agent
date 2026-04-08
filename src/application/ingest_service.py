@@ -86,9 +86,23 @@ class IngestService:
                 "doc_id": document.id,
                 "source_path": document.metadata["source_path"],
                 "page_count": document.metadata.get("page_count", 1),
+                "quality_status": document.metadata.get("quality_status"),
+                "non_empty_page_ratio": document.metadata.get("non_empty_page_ratio"),
+                "printable_char_ratio": document.metadata.get("printable_char_ratio"),
+                "alnum_ratio": document.metadata.get("alnum_ratio"),
+                "suspicious_symbol_ratio": document.metadata.get("suspicious_symbol_ratio"),
+                "latin_extended_ratio": document.metadata.get("latin_extended_ratio"),
             },
             elapsed_ms=(time.monotonic() - load_started) * 1000.0,
         )
+        quality_status = document.metadata.get("quality_status")
+        if isinstance(quality_status, str) and quality_status != "good":
+            self.logger.warning(
+                "PDF extraction quality %s for %s (%s)",
+                quality_status,
+                document.metadata["source_path"],
+                ", ".join(document.metadata.get("quality_warnings", [])),
+            )
 
         transform_started = time.monotonic()
         prepared = self.pipeline.prepare(document, collection)

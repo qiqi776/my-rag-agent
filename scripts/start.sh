@@ -231,12 +231,17 @@ ingestion:
 ${SUPPORTED_EXTENSIONS_BLOCK}
 retrieval:
   mode: "hybrid"
-  dense_top_k: 3
-  sparse_top_k: 3
+  dense_top_k: 4
+  sparse_top_k: 6
+  dense_candidate_multiplier: 3
+  sparse_candidate_multiplier: 4
+  max_candidate_top_k: 12
   rrf_k: 60
 generation:
-  max_context_results: 2
-  max_answer_chars: 240
+  max_context_results: 3
+  candidate_results: 6
+  max_context_chars: 1200
+  max_answer_chars: 500
 adapters:
   loader:
     provider: "${LOADER_PROVIDER}"
@@ -265,12 +270,25 @@ RUNTIME_DIR="${RUNTIME_DIR}"
 CONFIG_PATH="${CONFIG_PATH}"
 DOCS_DIR="${DOCS_DIR}"
 COLLECTION="${COLLECTION}"
+LOADER_PROVIDER="${LOADER_PROVIDER}"
 EOF
+}
+
+fct_run_ingest_preview() {
+	if [[ "${SKIP_INGEST}" -eq 1 ]]; then
+		fct_log_info "Skipping preview and initial ingest."
+		return 0
+	fi
+
+	fct_log_info "Previewing extracted content from ${DOCS_DIR}."
+	(
+		cd "${REPO_ROOT}"
+		"${PYTHON_BIN}" -m src.interfaces.cli.ingest_preview "${DOCS_DIR}" --collection "${COLLECTION}" --config "${CONFIG_PATH}"
+	)
 }
 
 fct_run_initial_ingest() {
 	if [[ "${SKIP_INGEST}" -eq 1 ]]; then
-		fct_log_info "Skipping initial ingest."
 		return 0
 	fi
 
@@ -290,10 +308,14 @@ Runtime:
   config:      ${CONFIG_PATH}
   docs:        ${DOCS_DIR}
   collection:  ${COLLECTION}
+  loader:      ${LOADER_PROVIDER}
 
 Next commands:
+  ${PYTHON_BIN} -m src.interfaces.cli.ingest_preview "${DOCS_DIR}" --collection "${COLLECTION}" --config "${CONFIG_PATH}"
+  ${PYTHON_BIN} -m src.interfaces.cli.documents list --collection "${COLLECTION}" --config "${CONFIG_PATH}"
   ${PYTHON_BIN} -m src.interfaces.cli.query "semantic embeddings" --collection "${COLLECTION}" --config "${CONFIG_PATH}"
   ${PYTHON_BIN} -m src.interfaces.cli.answer "semantic embeddings" --collection "${COLLECTION}" --config "${CONFIG_PATH}"
+  ${PYTHON_BIN} -m src.interfaces.cli.chat --collection "${COLLECTION}" --config "${CONFIG_PATH}"
   ${PYTHON_BIN} -m src.interfaces.cli.agent run-workflow research_and_answer "semantic embeddings" --collection "${COLLECTION}" --mode hybrid --config "${CONFIG_PATH}"
   ${PYTHON_BIN} -m src.interfaces.cli.traces stats --config "${CONFIG_PATH}"
 
@@ -314,6 +336,7 @@ fct_main() {
 	fct_detect_loader_profile
 	fct_write_config
 	fct_write_session_file
+	fct_run_ingest_preview
 	fct_run_initial_ingest
 	fct_print_next_steps
 }

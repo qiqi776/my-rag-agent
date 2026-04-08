@@ -1,0 +1,1 @@
+Round robin scheduling shares CPU time across runnable processes with a fixed time slice.

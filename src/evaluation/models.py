@@ -20,6 +20,7 @@ class RetrievalEvalCase:
     mode: str | None = None
     expected_doc_ids: list[str] = field(default_factory=list)
     expected_chunk_ids: list[str] = field(default_factory=list)
+    expected_source_paths: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -32,8 +33,10 @@ class RetrievalEvalCaseResult:
     recall_at_k: float
     returned_doc_ids: list[str] = field(default_factory=list)
     returned_chunk_ids: list[str] = field(default_factory=list)
+    returned_source_paths: list[str] = field(default_factory=list)
     matched_doc_ids: list[str] = field(default_factory=list)
     matched_chunk_ids: list[str] = field(default_factory=list)
+    matched_source_paths: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

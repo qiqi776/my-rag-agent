@@ -1,0 +1,1 @@
+Virtual memory gives each process an isolated address space and maps pages onto physical memory.
