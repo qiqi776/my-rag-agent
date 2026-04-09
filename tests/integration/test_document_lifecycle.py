@@ -11,6 +11,7 @@ from src.application.document_service import DocumentService
 from src.application.ingest_service import IngestService
 from src.application.search_service import SearchService
 from src.core.settings import load_settings
+from src.observability.dashboard.services.data_service import DataService
 from src.observability.trace_store import TraceStore
 
 
@@ -132,10 +133,16 @@ def test_delete_document_keeps_other_collection_searchable(tmp_path: Path) -> No
         trace_store=trace_store,
     )
     beta_response = search_service.search("semantic embeddings", collection="beta", top_k=1)
+    dashboard_data_service = DataService(
+        settings=settings,
+        vector_store=create_vector_store(settings),
+        document_service=document_service,
+    )
 
     assert delete_result.deleted
     assert alpha_docs == []
     assert len(beta_docs) == 1
+    assert len(dashboard_data_service.get_document_chunks(beta_docs[0].doc_id, "beta")) >= 1
     assert beta_response.results
     assert beta_response.results[0].source_path.endswith("python.txt")
     assert beta_response.citations[0].collection == "beta"

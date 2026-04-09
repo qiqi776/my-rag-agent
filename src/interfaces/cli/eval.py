@@ -6,24 +6,13 @@ import argparse
 import json
 from pathlib import Path
 
-from src.adapters.embedding.factory import create_embedding
-from src.adapters.llm.factory import create_llm
-from src.adapters.reranker.factory import create_reranker
-from src.adapters.vector_store.factory import create_vector_store
-from src.application.answer_service import AnswerService
-from src.application.search_service import SearchService
 from src.core.errors import ConfigError, EmptyQueryError, UnsupportedRetrievalModeError
-from src.core.settings import load_settings
-from src.evaluation.answer_eval import AnswerEvalRunner
-from src.evaluation.fixtures import (
-    DEFAULT_ANSWER_FIXTURES,
-    DEFAULT_RETRIEVAL_FIXTURES,
-    load_answer_cases,
-    load_retrieval_cases,
+from src.evaluation.fixtures import DEFAULT_ANSWER_FIXTURES, DEFAULT_RETRIEVAL_FIXTURES
+from src.evaluation.runtime import (
+    run_all_evaluations,
+    run_answer_evaluation,
+    run_retrieval_evaluation,
 )
-from src.evaluation.retrieval_eval import RetrievalEvalRunner
-from src.observability.trace_store import TraceStore
-from src.retrieval.sparse_retriever import SparseRetriever
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -65,79 +54,30 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _build_search_service(config_path: str) -> SearchService:
-    settings = load_settings(config_path)
-    trace_store = (
-        TraceStore(settings.observability.trace_file)
-        if settings.observability.trace_enabled
-        else None
-    )
-    vector_store = create_vector_store(settings)
-    return SearchService(
-        settings=settings,
-        embedding=create_embedding(settings),
-        vector_store=vector_store,
-        sparse_retriever=SparseRetriever(vector_store),
-        trace_store=trace_store,
-    )
-
-
-def _build_answer_service(config_path: str) -> AnswerService:
-    settings = load_settings(config_path)
-    trace_store = (
-        TraceStore(settings.observability.trace_file)
-        if settings.observability.trace_enabled
-        else None
-    )
-    vector_store = create_vector_store(settings)
-    search_service = SearchService(
-        settings=settings,
-        embedding=create_embedding(settings),
-        vector_store=vector_store,
-        sparse_retriever=SparseRetriever(vector_store),
-        trace_store=trace_store,
-    )
-    return AnswerService(
-        settings=settings,
-        search_service=search_service,
-        reranker=create_reranker(settings),
-        llm=create_llm(settings),
-        trace_store=trace_store,
-    )
-
-
 def main() -> int:
     args = build_parser().parse_args()
     try:
         if args.command == "retrieval":
-            report = RetrievalEvalRunner(_build_search_service(args.config)).run(
-                load_retrieval_cases(args.fixtures)
-            )
+            report = run_retrieval_evaluation(args.config, args.fixtures)
             print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
             return 0 if report.passed_cases == report.total_cases else 1
 
         if args.command == "answer":
-            report = AnswerEvalRunner(_build_answer_service(args.config)).run(
-                load_answer_cases(args.fixtures)
-            )
+            report = run_answer_evaluation(args.config, args.fixtures)
             print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
             return 0 if report.passed_cases == report.total_cases else 1
 
-        retrieval_report = RetrievalEvalRunner(_build_search_service(args.config)).run(
-            load_retrieval_cases(args.retrieval_fixtures)
+        payload = run_all_evaluations(
+            args.config,
+            args.retrieval_fixtures,
+            args.answer_fixtures,
         )
-        answer_report = AnswerEvalRunner(_build_answer_service(args.config)).run(
-            load_answer_cases(args.answer_fixtures)
-        )
-        payload = {
-            "kind": "evaluation_summary",
-            "retrieval": retrieval_report.to_dict(),
-            "answer": answer_report.to_dict(),
-        }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
-        if retrieval_report.passed_cases != retrieval_report.total_cases:
+        retrieval_report = payload["retrieval"]
+        answer_report = payload["answer"]
+        if retrieval_report["passed_cases"] != retrieval_report["total_cases"]:
             return 1
-        if answer_report.passed_cases != answer_report.total_cases:
+        if answer_report["passed_cases"] != answer_report["total_cases"]:
             return 1
         return 0
     except (

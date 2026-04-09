@@ -18,6 +18,7 @@
 - 文档管理：支持列出、查看摘要、删除文档
 - 可观测性：支持 JSONL traces 与 `mrag-traces`
 - 评估：支持 retrieval / answer regression
+- Dashboard：支持本地可视化总览、数据浏览、摄取管理、trace 查看和评估面板
 - MCP：支持本地工具调用与 stdio 模式
 - Agent-ready：提供最小 workflow runner 与工具注册层
 
@@ -36,6 +37,8 @@ uv venv
 uv sync --extra dev
 # 如需 chroma / cross-encoder：
 uv sync --extra dev --extra vector --extra rerank
+# 如需 Dashboard：
+uv sync --extra dev --extra dashboard
 ```
 
 也可以直接使用本地脚本准备一个 demo 环境：
@@ -44,6 +47,28 @@ uv sync --extra dev --extra vector --extra rerank
 bash scripts/start.sh
 bash scripts/stop.sh
 ```
+
+Dashboard 可以通过下面的命令启动：
+
+```bash
+bash scripts/start_dashboard.sh --config ./config/settings.yaml.example
+```
+
+内置页面：
+
+- `Overview`
+- `Data Browser`
+- `Ingestion Manager`
+- `Ingestion Traces`
+- `Query Traces`
+- `Evaluation Panel`
+
+典型工作流：
+
+1. 先通过 `mrag-ingest` 或 Dashboard 的 `Ingestion Manager` 导入文档
+2. 在 `Data Browser` 查看文档、chunk 和 metadata
+3. 在 `Ingestion Traces` / `Query Traces` 排查摄取与检索问题
+4. 在 `Evaluation Panel` 运行 retrieval / answer / all 回归
 
 ## MCP Tools
 
@@ -66,7 +91,6 @@ uv run ruff check .
 
 - 还没有 HTTP API
 - 还没有完整 OCR / Vision LLM / 多模态检索链路
-- 还没有 Dashboard / 在线评估平台
 - 还不是完整自主 Agent 平台，不包含 planner、memory、multi-agent orchestration
 
 更多设计细节、边界说明和后续里程碑，请参考 `specs/minimal-modular-rag-project.md`。

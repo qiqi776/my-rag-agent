@@ -1,4 +1,4 @@
-"""Ingestion application service for the M1 MVP."""
+"""Ingestion application service for loading, previewing, and storing documents."""
 
 from __future__ import annotations
 
@@ -18,6 +18,36 @@ from src.ingestion.models import IngestionUnit
 from src.ingestion.pipeline import IngestionPipeline, create_ingestion_pipeline
 from src.observability.logger import get_logger
 from src.observability.trace_store import TraceStore
+
+
+def discover_ingestion_files(path: str | Path, supported_extensions: list[str]) -> list[Path]:
+    """Discover supported files from a path."""
+
+    source = Path(path).resolve()
+    if source.is_file():
+        return [source]
+
+    discovered: list[Path] = []
+    for extension in supported_extensions:
+        discovered.extend(source.rglob(f"*{extension}"))
+        discovered.extend(source.rglob(f"*{extension.upper()}"))
+    return sorted(set(discovered))
+
+
+def first_non_empty_excerpt(texts: Iterable[str], max_chars: int) -> str:
+    """Return the first non-empty normalized excerpt for preview purposes."""
+
+    if max_chars <= 3:
+        raise ValueError("max_chars must be > 3")
+
+    for text in texts:
+        normalized = " ".join(text.split()).strip()
+        if not normalized:
+            continue
+        if len(normalized) <= max_chars:
+            return normalized
+        return f"{normalized[: max_chars - 3].rstrip()}..."
+    return "<empty>"
 
 
 @dataclass(slots=True)
@@ -59,15 +89,7 @@ class IngestService:
         return results
 
     def _discover_files(self, path: str | Path) -> list[Path]:
-        source = Path(path).resolve()
-        if source.is_file():
-            return [source]
-
-        discovered: list[Path] = []
-        for extension in self.settings.ingestion.supported_extensions:
-            discovered.extend(source.rglob(f"*{extension}"))
-            discovered.extend(source.rglob(f"*{extension.upper()}"))
-        return sorted(set(discovered))
+        return discover_ingestion_files(path, self.settings.ingestion.supported_extensions)
 
     def _ingest_file(self, file_path: Path, collection: str) -> IngestedDocument:
         trace = TraceContext(

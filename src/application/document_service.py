@@ -55,6 +55,20 @@ class DocumentDetail:
         return asdict(self)
 
 
+@dataclass(slots=True)
+class DocumentChunkDetail:
+    """Detailed chunk view for dashboard and document browser consumers."""
+
+    chunk_id: str
+    doc_id: str
+    chunk_index: int
+    text: str
+    metadata: Metadata
+
+    def to_dict(self) -> Metadata:
+        return asdict(self)
+
+
 class DocumentService:
     """Expose list and delete operations over stored documents."""
 
@@ -102,6 +116,43 @@ class DocumentService:
         doc_id: str,
         collection: str | None = None,
     ) -> DocumentDetail | None:
+        match = self._resolve_document_records(doc_id, collection)
+        if match is None:
+            return None
+        collection_name, records = match
+        return self._build_document_detail(collection_name, records)
+
+    def get_document_chunks(
+        self,
+        doc_id: str,
+        collection: str | None = None,
+    ) -> list[DocumentChunkDetail]:
+        """Return ordered chunk details for a document."""
+
+        match = self._resolve_document_records(doc_id, collection)
+        if match is None:
+            return []
+        _, records = match
+        return self._build_chunk_details(records)
+
+    def delete_document(
+        self,
+        doc_id: str,
+        collection: str | None = None,
+    ) -> DeleteDocumentResult:
+        target_collection = collection or self.settings.ingestion.default_collection
+        deleted_chunks = self.vector_store.delete_doc(target_collection, doc_id)
+        return DeleteDocumentResult(
+            doc_id=doc_id,
+            collection=target_collection,
+            deleted_chunks=deleted_chunks,
+        )
+
+    def _resolve_document_records(
+        self,
+        doc_id: str,
+        collection: str | None,
+    ) -> tuple[str, list[ChunkRecord]] | None:
         target_collections = (
             [collection]
             if collection is not None
@@ -129,21 +180,7 @@ class DocumentService:
                 "Specify a collection explicitly."
             )
 
-        collection_name, records = matches[0]
-        return self._build_document_detail(collection_name, records)
-
-    def delete_document(
-        self,
-        doc_id: str,
-        collection: str | None = None,
-    ) -> DeleteDocumentResult:
-        target_collection = collection or self.settings.ingestion.default_collection
-        deleted_chunks = self.vector_store.delete_doc(target_collection, doc_id)
-        return DeleteDocumentResult(
-            doc_id=doc_id,
-            collection=target_collection,
-            deleted_chunks=deleted_chunks,
-        )
+        return matches[0]
 
     def _build_document_detail(
         self,
@@ -189,3 +226,24 @@ class DocumentService:
             preview=preview,
             metadata=metadata,
         )
+
+    def _build_chunk_details(self, records: list[ChunkRecord]) -> list[DocumentChunkDetail]:
+        ordered_records = sorted(
+            records,
+            key=lambda record: (
+                int(record.metadata.get("chunk_index", 0)),
+                record.id,
+            ),
+        )
+        details: list[DocumentChunkDetail] = []
+        for record in ordered_records:
+            details.append(
+                DocumentChunkDetail(
+                    chunk_id=record.id,
+                    doc_id=record.doc_id,
+                    chunk_index=int(record.metadata.get("chunk_index", 0)),
+                    text=record.text,
+                    metadata=record.metadata.copy(),
+                )
+            )
+        return details

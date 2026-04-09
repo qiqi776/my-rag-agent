@@ -19,6 +19,9 @@ dev = [
     "pytest-asyncio>=1.0",
     "ruff>=0.15",
 ]
+dashboard = [
+    "streamlit>=1.44",
+]
 vector = [
     "chromadb>=0.5",
 ]

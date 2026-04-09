@@ -108,6 +108,21 @@ class TraceRecord:
             "stages": self.stages,
         }
 
+    def stage_rows(self) -> list[dict[str, Any]]:
+        """Return UI-friendly stage timing rows."""
+
+        rows: list[dict[str, Any]] = []
+        for stage in self.stages:
+            payload = stage.get("data", {})
+            rows.append(
+                {
+                    "stage_name": str(stage.get("stage", "")),
+                    "elapsed_ms": _float_or_zero(stage.get("elapsed_ms")),
+                    "data": payload if isinstance(payload, dict) else {},
+                }
+            )
+        return rows
+
 
 @dataclass(slots=True)
 class TraceSummary:

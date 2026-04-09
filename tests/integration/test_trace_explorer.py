@@ -14,6 +14,7 @@ from src.application.search_service import SearchService
 from src.core.settings import load_settings
 from src.interfaces.cli.answer import main as answer_main
 from src.interfaces.cli.traces import main as traces_main
+from src.observability.dashboard.services.trace_service import TraceService
 from src.observability.trace_store import TraceStore
 from src.retrieval.sparse_retriever import SparseRetriever
 
@@ -139,3 +140,11 @@ def test_trace_cli_lists_shows_and_summarizes_traces(
     assert stats_payload["total_traces"] == 4
     assert stats_payload["trace_counts"]["answer"] == 1
     assert stats_payload["trace_counts"]["query"] == 2
+
+    dashboard_trace_service = TraceService(trace_file=trace_path)
+    query_traces = dashboard_trace_service.list_traces("query")
+    answer_trace = dashboard_trace_service.list_traces("answer", limit=1)[0]
+    answer_stage_rows = dashboard_trace_service.get_stage_rows(answer_trace["trace_id"])
+
+    assert len(query_traces) == 2
+    assert any(row["stage_name"] == "rerank" for row in answer_stage_rows)

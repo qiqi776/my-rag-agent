@@ -12,6 +12,7 @@ from src.adapters.vector_store.factory import create_vector_store
 from src.application.ingest_service import IngestService
 from src.core.settings import load_settings
 from src.interfaces.cli.eval import main as eval_main
+from src.observability.dashboard.services.evaluation_service import EvaluationService
 from src.observability.trace_store import TraceStore
 
 
@@ -139,3 +140,16 @@ def test_eval_cli_runs_retrieval_and_answer_regressions(
     payload = json.loads(capsys.readouterr().out)
     assert payload["retrieval"]["passed_cases"] == 1
     assert payload["answer"]["passed_cases"] == 1
+
+    history_path = tmp_path / "eval-history.jsonl"
+    dashboard_service = EvaluationService(settings_path=config_path, history_path=history_path)
+    dashboard_payload = dashboard_service.run(
+        "all",
+        retrieval_fixtures=retrieval_fixture,
+        answer_fixtures=answer_fixture,
+    )
+    history = dashboard_service.list_history()
+
+    assert dashboard_payload["retrieval"]["passed_cases"] == 1
+    assert dashboard_payload["answer"]["passed_cases"] == 1
+    assert len(history) == 1

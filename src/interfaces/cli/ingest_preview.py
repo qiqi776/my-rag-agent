@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 
 from src.adapters.loader.factory import create_loader
+from src.application.ingest_service import discover_ingestion_files, first_non_empty_excerpt
 from src.core.errors import ConfigError, UnsupportedFileTypeError
 from src.core.settings import load_settings
 from src.ingestion.pipeline import create_ingestion_pipeline
@@ -30,30 +31,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     return parser
 
-
-def _discover_files(path: str | Path, supported_extensions: list[str]) -> list[Path]:
-    source = Path(path).resolve()
-    if source.is_file():
-        return [source]
-
-    discovered: list[Path] = []
-    for extension in supported_extensions:
-        discovered.extend(source.rglob(f"*{extension}"))
-        discovered.extend(source.rglob(f"*{extension.upper()}"))
-    return sorted(set(discovered))
-
-
-def _first_non_empty_excerpt(texts: list[str], max_chars: int) -> str:
-    for text in texts:
-        normalized = " ".join(text.split()).strip()
-        if not normalized:
-            continue
-        if len(normalized) <= max_chars:
-            return normalized
-        return f"{normalized[: max_chars - 3].rstrip()}..."
-    return "<empty>"
-
-
 def main() -> int:
     args = build_parser().parse_args()
     try:
@@ -61,7 +38,7 @@ def main() -> int:
         loader = create_loader(settings)
         pipeline = create_ingestion_pipeline(settings)
         collection = args.collection or settings.ingestion.default_collection
-        files = _discover_files(args.path, settings.ingestion.supported_extensions)
+        files = discover_ingestion_files(args.path, settings.ingestion.supported_extensions)
     except (ConfigError, FileNotFoundError, ValueError) as exc:
         print(f"[ERROR] {exc}")
         return 1
@@ -75,7 +52,7 @@ def main() -> int:
         for file_path in files:
             document = loader.load(file_path)
             prepared = pipeline.prepare(document, collection)
-            preview_text = _first_non_empty_excerpt(
+            preview_text = first_non_empty_excerpt(
                 [unit.text for unit in prepared.units] or [document.text],
                 max_chars=args.max_chars,
             )

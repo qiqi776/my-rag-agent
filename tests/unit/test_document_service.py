@@ -166,6 +166,7 @@ def test_document_service_exposes_collections_and_document_summary(tmp_path: Pat
     assert detail is not None
     assert detail.preview.startswith("Virtual memory")
     assert detail.metadata["doc_type"] == "text"
+    assert [chunk.chunk_index for chunk in service.get_document_chunks("doc-1", "knowledge")] == [0]
 
 
 @pytest.mark.unit

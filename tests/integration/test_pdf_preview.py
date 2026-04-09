@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from src.interfaces.cli.ingest_preview import main as ingest_preview_main
+from src.observability.dashboard.services.ingestion_service import DashboardIngestionService
 
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "ingestion"
 
@@ -84,4 +85,19 @@ def test_pdf_preview_reports_quality_and_does_not_write_store(
     assert "quality_status=good" in output
     assert "suggested_loader=pdf" in output
     assert "Minimal Modular RAG PDF" in output
+    assert not storage_path.exists()
+
+
+@pytest.mark.integration
+def test_dashboard_ingestion_service_preview_uses_pdf_quality_metrics(tmp_path: Path) -> None:
+    config_path = tmp_path / "settings.yaml"
+    storage_path = tmp_path / "store.json"
+    _write_pdf_settings(config_path, storage_path)
+
+    service = DashboardIngestionService(settings_path=config_path)
+    results = service.preview_path(FIXTURE_DIR / "simple.pdf", "knowledge")
+
+    assert len(results) == 1
+    assert results[0]["quality_status"] == "good"
+    assert results[0]["page_count"] == 1
     assert not storage_path.exists()
